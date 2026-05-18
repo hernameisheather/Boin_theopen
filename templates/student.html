@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ student.name }} 학생 기록{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{{ student.name }} <span class="muted">학생</span></h1>
+    <p class="muted small">마지막 업데이트: {{ last_update }}</p>
+  </div>
+  <a href="{{ url_for('logout') }}" class="btn-ghost">로그아웃</a>
+</header>
+
+{% if stats %}
+<section class="stats-grid">
+  {% for cat, s in stats.items() %}
+  <div class="stat-card">
+    <div class="stat-cat">{{ cat }}</div>
+    <div class="stat-avg">{{ s.avg }}<span class="stat-unit">점 평균</span></div>
+    <div class="stat-meta">총 {{ s.count }}회 · 최고 {{ s.max }} · 최저 {{ s.min }}</div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if not records %}
+<div class="card empty">
+  <p>아직 등록된 기록이 없습니다.</p>
+</div>
+{% else %}
+  {% for category, items in grouped.items() %}
+  <section class="card">
+    <h2>{{ category }}</h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th style="width:120px">날짜</th>
+          <th style="width:90px">점수/결과</th>
+          <th>피드백</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in items %}
+        <tr>
+          <td>{{ r.date }}</td>
+          <td class="score">{{ r.score }}</td>
+          <td class="feedback">{{ r.feedback }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+{% endif %}
+{% endblock %}

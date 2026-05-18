@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}학부모 로그인{% endblock %}
+{% block content %}
+<div class="card login-card">
+  <h1>📘 학생 성적·피드백 포털</h1>
+  <p class="subtitle">자녀의 학생코드와 PIN을 입력해 주세요.</p>
+  <form method="post" class="form">
+    <label>
+      <span>학생코드</span>
+      <input type="text" name="student_code" required autofocus placeholder="예: S001">
+    </label>
+    <label>
+      <span>PIN 번호</span>
+      <input type="password" name="pin" inputmode="numeric" placeholder="선생님께 받은 PIN">
+    </label>
+    <button type="submit" class="btn-primary">로그인</button>
+  </form>
+  <p class="hint">학생코드와 PIN은 담당 선생님께 안내받으실 수 있습니다.</p>
+</div>
+{% endblock %}

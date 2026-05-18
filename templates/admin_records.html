@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}기록 관리{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <h1>📋 기록 관리</h1>
+  <p class="muted small">총 {{ records|length }}건 표시</p>
+</header>
+
+<section class="card">
+  <h2>➕ 새 기록 추가</h2>
+  <form method="post" class="form record-form">
+    <div class="form-row">
+      <label>
+        <span>날짜</span>
+        <input type="date" name="date" value="{{ today }}" required>
+      </label>
+      <label>
+        <span>학생</span>
+        <select name="student_code" required>
+          <option value="">— 선택 —</option>
+          {% for code, s in students.items() %}
+          <option value="{{ code }}">{{ s.name }} ({{ code }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>항목</span>
+        <input type="text" name="category" list="category-list" placeholder="Daily Test, 숙제 등" required>
+        <datalist id="category-list">
+          {% for c in categories %}<option value="{{ c }}">{% endfor %}
+        </datalist>
+      </label>
+      <label>
+        <span>점수/결과</span>
+        <input type="text" name="score" placeholder="92 또는 완료" required>
+      </label>
+    </div>
+    <label>
+      <span>피드백</span>
+      <textarea name="feedback" rows="2" placeholder="학생에게 전달할 피드백을 입력하세요"></textarea>
+    </label>
+    <button type="submit" class="btn-primary">기록 저장</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>🔍 필터</h2>
+  <form method="get" class="form filter-form">
+    <div class="form-row">
+      <label>
+        <span>학생</span>
+        <select name="student" onchange="this.form.submit()">
+          <option value="">전체 학생</option>
+          {% for code, s in students.items() %}
+          <option value="{{ code }}" {% if filter_student == code %}selected{% endif %}>{{ s.name }} ({{ code }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>항목</span>
+        <select name="category" onchange="this.form.submit()">
+          <option value="">전체 항목</option>
+          {% for c in categories %}
+          <option value="{{ c }}" {% if filter_category == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if filter_student or filter_category %}
+      <a href="{{ url_for('admin_records') }}" class="btn-ghost">필터 초기화</a>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+{% if not records %}
+<section class="card empty">
+  <p>조건에 맞는 기록이 없습니다.</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>📊 기록 목록</h2>
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:110px">날짜</th>
+        <th style="width:120px">학생</th>
+        <th style="width:110px">항목</th>
+        <th style="width:80px">점수</th>
+        <th>피드백</th>
+        <th style="width:90px">작업</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for idx, r in records %}
+      <tr>
+        <td>{{ r.date }}</td>
+        <td>{{ students.get(r.student_code, {}).get('name', '?') }}<br><code class="muted small">{{ r.student_code }}</code></td>
+        <td>{{ r.category }}</td>
+        <td class="score">{{ r.score }}</td>
+        <td class="feedback">{{ r.feedback }}</td>
+        <td>
+          <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini">수정</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

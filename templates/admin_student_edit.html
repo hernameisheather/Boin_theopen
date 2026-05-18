@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}학생 수정{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <h1>✏️ 학생 정보 수정</h1>
+  <a href="{{ url_for('admin_students') }}" class="btn-ghost">← 목록으로</a>
+</header>
+
+<section class="card">
+  <form method="post" class="form">
+    <div class="form-row">
+      <label>
+        <span>학생코드</span>
+        <input type="text" name="student_code" value="{{ code }}" required>
+      </label>
+      <label>
+        <span>이름</span>
+        <input type="text" name="student_name" value="{{ student.name }}" required>
+      </label>
+      <label>
+        <span>PIN</span>
+        <input type="text" name="pin" value="{{ student.pin }}">
+      </label>
+      <label>
+        <span>학부모이름(선택)</span>
+        <input type="text" name="parent" value="{{ student.parent }}">
+      </label>
+    </div>
+    <p class="hint">⚠️ 학생코드를 변경하면 이 학생의 모든 기존 기록도 자동으로 새 코드로 업데이트됩니다.</p>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">수정 저장</button>
+      <a href="{{ url_for('admin_students') }}" class="btn-ghost">취소</a>
+    </div>
+  </form>
+</section>
+
+<section class="card danger-zone">
+  <h2>⚠️ 위험 작업</h2>
+  <p class="muted">이 학생과 <b>이 학생의 모든 기록</b>이 영구적으로 삭제됩니다. 되돌릴 수 없습니다.</p>
+  <form method="post" onsubmit="return confirm('정말 학생 {{ student.name }} ({{ code }})을(를) 삭제하시겠습니까?\n\n이 학생의 모든 Daily Test, 숙제, 피드백 기록도 함께 삭제됩니다.\n되돌릴 수 없습니다.');">
+    <input type="hidden" name="action" value="delete">
+    <button type="submit" class="btn-danger">학생 및 모든 기록 삭제</button>
+  </form>
+</section>
+{% endblock %}

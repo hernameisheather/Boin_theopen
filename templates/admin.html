@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}관리자 페이지{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <div>
+    <h1>📊 대시보드</h1>
+    <p class="muted small">마지막 업데이트: {{ last_update }}</p>
+  </div>
+</header>
+
+<section class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-cat">등록된 학생</div>
+    <div class="stat-avg">{{ students|length }}<span class="stat-unit">명</span></div>
+    <div class="stat-meta"><a href="{{ url_for('admin_students') }}">학생 관리 →</a></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-cat">전체 기록</div>
+    <div class="stat-avg">{{ record_count }}<span class="stat-unit">건</span></div>
+    <div class="stat-meta"><a href="{{ url_for('admin_records') }}">기록 관리 →</a></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>🚀 빠른 시작</h2>
+  <p>대부분의 일상 작업은 <b>기록 관리</b> 와 <b>학생 관리</b> 페이지에서 바로 처리할 수 있습니다.</p>
+  <ul style="line-height:2;">
+    <li>📋 <a href="{{ url_for('admin_records') }}">기록 관리</a> — Daily Test, 숙제, 피드백 직접 추가/수정/삭제</li>
+    <li>👥 <a href="{{ url_for('admin_students') }}">학생 관리</a> — 학생 추가/이름·PIN 수정/삭제</li>
+    <li>💾 <a href="{{ url_for('admin_download') }}">Excel 다운로드</a> — 현재 데이터를 백업 파일로 저장</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>📤 Excel 일괄 업로드 (선택)</h2>
+  <p class="muted">학기 초나 데이터 복원 시 사용. <b>주의: 업로드하면 현재 데이터가 모두 덮어씌워집니다.</b></p>
+  <form method="post" enctype="multipart/form-data" class="form upload-form">
+    <input type="file" name="excel_file" accept=".xlsx,.xlsm" required>
+    <button type="submit" class="btn-primary" onclick="return confirm('현재 등록된 학생 {{ students|length }}명, 기록 {{ record_count }}건이 모두 새 파일로 덮어씌워집니다. 계속하시겠습니까?');">업로드</button>
+  </form>
+  <p class="hint">
+    📄 <a href="{{ url_for('download_template') }}">빈 Excel 템플릿 다운로드</a> · 시트 2개 필요: <b>학생명단</b>, <b>기록</b>
+  </p>
+</section>
+
+<section class="card info">
+  <h2>📖 Excel 형식 안내</h2>
+  <p><b>시트 1: 학생명단</b></p>
+  <pre>학생코드 | 학생이름 | PIN  | 학부모이름(선택)
+S001    | 김민지   | 1234 | 김민지 어머니</pre>
+  <p><b>시트 2: 기록</b></p>
+  <pre>날짜       | 학생코드 | 항목        | 점수 | 피드백
+2026-05-18 | S001    | Daily Test  | 92   | 어휘에서 실수가 있었지만 ...
+2026-05-18 | S001    | 숙제        | 완료 | 꼼꼼하게 잘 했습니다.</pre>
+</section>
+{% endblock %}

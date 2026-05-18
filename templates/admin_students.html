@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}학생 관리{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <h1>👥 학생 관리</h1>
+  <p class="muted small">총 {{ students|length }}명 등록</p>
+</header>
+
+<section class="card">
+  <h2>➕ 새 학생 추가</h2>
+  <form method="post" class="form">
+    <div class="form-row">
+      <label>
+        <span>학생코드</span>
+        <input type="text" name="student_code" required placeholder="예: S001">
+      </label>
+      <label>
+        <span>이름</span>
+        <input type="text" name="student_name" required placeholder="예: 김민지">
+      </label>
+      <label>
+        <span>PIN</span>
+        <input type="text" name="pin" placeholder="예: 1234">
+      </label>
+      <label>
+        <span>학부모이름(선택)</span>
+        <input type="text" name="parent" placeholder="예: 김민지 어머니">
+      </label>
+    </div>
+    <button type="submit" class="btn-primary">학생 추가</button>
+  </form>
+</section>
+
+{% if not students %}
+<section class="card empty">
+  <p>아직 등록된 학생이 없습니다. 위에서 추가하세요.</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>📋 등록된 학생</h2>
+  <p class="muted">학생코드와 PIN을 각 학부모에게 안내하세요.</p>
+  <table class="records">
+    <thead>
+      <tr>
+        <th>학생코드</th>
+        <th>이름</th>
+        <th>PIN</th>
+        <th>학부모</th>
+        <th style="width:90px">작업</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for code, s in students.items() %}
+      <tr>
+        <td><code>{{ code }}</code></td>
+        <td>{{ s.name }}</td>
+        <td><code>{{ s.pin or '—' }}</code></td>
+        <td>{{ s.parent or '—' }}</td>
+        <td>
+          <a href="{{ url_for('admin_student_edit', code=code) }}" class="btn-mini">수정</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

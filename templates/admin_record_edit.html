@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}기록 수정{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <h1>✏️ 기록 수정</h1>
+  <a href="{{ url_for('admin_records') }}" class="btn-ghost">← 목록으로</a>
+</header>
+
+<section class="card">
+  <form method="post" class="form">
+    <div class="form-row">
+      <label>
+        <span>날짜</span>
+        <input type="date" name="date" value="{{ record.date }}" required>
+      </label>
+      <label>
+        <span>학생</span>
+        <select name="student_code" required>
+          {% for code, s in students.items() %}
+          <option value="{{ code }}" {% if record.student_code == code %}selected{% endif %}>{{ s.name }} ({{ code }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>항목</span>
+        <input type="text" name="category" value="{{ record.category }}" list="category-list" required>
+        <datalist id="category-list">
+          {% for c in categories %}<option value="{{ c }}">{% endfor %}
+        </datalist>
+      </label>
+      <label>
+        <span>점수/결과</span>
+        <input type="text" name="score" value="{{ record.score }}" required>
+      </label>
+    </div>
+    <label>
+      <span>피드백</span>
+      <textarea name="feedback" rows="4">{{ record.feedback }}</textarea>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">수정 저장</button>
+      <a href="{{ url_for('admin_records') }}" class="btn-ghost">취소</a>
+    </div>
+  </form>
+</section>
+
+<section class="card danger-zone">
+  <h2>⚠️ 위험 작업</h2>
+  <p class="muted">이 기록을 영구적으로 삭제합니다. 되돌릴 수 없습니다.</p>
+  <form method="post" onsubmit="return confirm('정말 이 기록을 삭제하시겠습니까?\n\n날짜: {{ record.date }}\n학생: {{ students.get(record.student_code, {}).get(\"name\", \"?\") }}\n항목: {{ record.category }}\n점수: {{ record.score }}\n\n되돌릴 수 없습니다.');">
+    <input type="hidden" name="action" value="delete">
+    <button type="submit" class="btn-danger">이 기록 삭제</button>
+  </form>
+</section>
+{% endblock %}
