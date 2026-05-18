@@ -176,7 +176,29 @@ pre {
   line-height: 1.1;
 }
 .stat-unit { font-size: 0.85rem; color: var(--muted); margin-left: 4px; font-weight: 500; }
-.stat-meta { color: var(--muted); font-size: 0.8rem; margin-top: 6px; }
+.stat-meta { color: var(--muted); font-size: 0.8rem; margin-top: 6px; line-height: 1.5; }
+.stat-meta b { color: var(--text); }
+.diff-up   { color: #16a34a; font-weight: 600; }
+.diff-down { color: #dc2626; font-weight: 600; }
+
+/* ─── 추세 그래프 ──────────────────────────────────────── */
+.chart-wrap {
+  margin: 4px 0 18px;
+  padding: 12px 4px 4px;
+  background: #fafbff;
+  border: 1px solid #eef0f8;
+  border-radius: 8px;
+}
+.chart-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0 10px 4px;
+}
+.trend-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 
 /* ─── 테이블 ───────────────────────────────────────────── */
 .records {

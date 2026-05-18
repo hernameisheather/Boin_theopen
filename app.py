@@ -171,6 +171,58 @@ def login():
     return render_template("login.html")
 
 
+def _parse_score(raw):
+    """문자열 점수에서 숫자만 추출 (예: '92점' → 92.0). 실패 시 None."""
+    if raw is None:
+        return None
+    s = str(raw).replace("점", "").replace(" ", "")
+    try:
+        return float(s)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _build_chart(points, width=560, height=160, padding=32):
+    """날짜순으로 정렬된 [{date, score}] 리스트를 SVG 좌표 데이터로 변환."""
+    if not points:
+        return None
+    inner_w = width - 2 * padding
+    inner_h = height - 2 * padding
+    n = len(points)
+    scores = [p["score"] for p in points]
+    min_s, max_s = min(scores), max(scores)
+    rng = max(max_s - min_s, 10)
+    y_min = max(0, min_s - rng * 0.15)
+    y_max = min(100, max_s + rng * 0.15) if max_s <= 100 else max_s + rng * 0.15
+    if y_max - y_min < 10:
+        y_max = y_min + 10
+
+    def x_at(i):
+        return width / 2 if n == 1 else padding + (i / (n - 1)) * inner_w
+
+    def y_at(v):
+        return padding + (1 - (v - y_min) / (y_max - y_min)) * inner_h
+
+    plot = [{
+        "x": round(x_at(i), 1),
+        "y": round(y_at(p["score"]), 1),
+        "date": p["date"],
+        "score": p["score"],
+    } for i, p in enumerate(points)]
+
+    path = "M " + " L ".join(f"{p['x']},{p['y']}" for p in plot)
+
+    return {
+        "width": width,
+        "height": height,
+        "padding": padding,
+        "y_min": int(round(y_min)),
+        "y_max": int(round(y_max)),
+        "points": plot,
+        "path": path,
+    }
+
+
 @app.route("/me")
 @parent_required
 def my_page():
@@ -183,15 +235,10 @@ def my_page():
 
     items, grouped = records_for(code)
 
+    # 학생 본인 카테고리별 통계
     stats = {}
     for cat, recs in grouped.items():
-        nums = []
-        for r in recs:
-            s = r["score"].replace("점", "").replace(" ", "")
-            try:
-                nums.append(float(s))
-            except (ValueError, AttributeError):
-                pass
+        nums = [v for v in (_parse_score(r["score"]) for r in recs) if v is not None]
         if nums:
             stats[cat] = {
                 "count": len(nums),
@@ -200,12 +247,37 @@ def my_page():
                 "min": min(nums),
             }
 
+    # 반 전체 카테고리별 평균 (모든 학생 합산)
+    class_buckets = defaultdict(list)
+    for r in data["records"]:
+        v = _parse_score(r["score"])
+        if v is not None:
+            class_buckets[r["category"] or "기타"].append(v)
+    class_avg = {
+        cat: round(sum(vs) / len(vs), 1)
+        for cat, vs in class_buckets.items() if vs
+    }
+
+    # 카테고리별 추세 그래프 데이터 (이 학생만, 날짜 오름차순)
+    charts = {}
+    for cat, recs in grouped.items():
+        pts = []
+        for r in recs:
+            v = _parse_score(r["score"])
+            if v is not None and r["date"]:
+                pts.append({"date": r["date"], "score": v})
+        pts.sort(key=lambda p: p["date"])
+        if len(pts) >= 2:
+            charts[cat] = _build_chart(pts)
+
     return render_template(
         "student.html",
         student=student,
         records=items,
         grouped=grouped,
         stats=stats,
+        class_avg=class_avg,
+        charts=charts,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 
