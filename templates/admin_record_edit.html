@@ -46,10 +46,11 @@
   </form>
 </section>
 
+{% set student_name = students.get(record.student_code, {}).get('name', '?') %}
 <section class="card danger-zone">
   <h2>⚠️ 위험 작업</h2>
   <p class="muted">이 기록을 영구적으로 삭제합니다. 되돌릴 수 없습니다.</p>
-  <form method="post" onsubmit="return confirm('정말 이 기록을 삭제하시겠습니까?\n\n날짜: {{ record.date }}\n학생: {{ students.get(record.student_code, {}).get(\"name\", \"?\") }}\n항목: {{ record.category }}\n점수: {{ record.score }}\n\n되돌릴 수 없습니다.');">
+  <form method="post" onsubmit="return confirm('정말 이 기록을 삭제하시겠습니까?\n\n날짜: {{ record.date }}\n학생: {{ student_name }}\n항목: {{ record.category }}\n점수: {{ record.score }}\n\n되돌릴 수 없습니다.');">
     <input type="hidden" name="action" value="delete">
     <button type="submit" class="btn-danger">이 기록 삭제</button>
   </form>
