@@ -105,18 +105,26 @@ def _parse_workbook(wb):
     messages = []
     if "공지사항" in wb.sheetnames:
         ws = wb["공지사항"]
-        for row in list(ws.iter_rows(values_only=True))[1:]:
-            if not row or row[0] is None:
-                continue
-            kind = str(row[0]).strip()
-            code = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-            content = str(row[2]).strip() if len(row) > 2 and row[2] else ""
-            if not content:
-                continue
-            if kind in ("이번주숙제", "이번주 숙제", "숙제", "homework"):
-                homework = content  # 마지막 행이 최종 값
-            elif kind in ("한마디", "신쌤의한마디", "신쌤의 한마디", "메시지", "message"):
-                messages.append({"student_code": code, "content": content})
+        rows = list(ws.iter_rows(values_only=True))
+        if rows:
+            header = [str(c).strip() if c is not None else "" for c in rows[0]]
+            # 신형식: 종류 | 대상학생코드 | 학생이름 | 내용
+            # 구형식: 종류 | 대상학생코드 | 내용
+            has_name_col = len(header) >= 3 and header[2] in ("학생이름", "이름", "name", "Name")
+            content_idx = 3 if has_name_col else 2
+
+            for row in rows[1:]:
+                if not row or row[0] is None:
+                    continue
+                kind = str(row[0]).strip()
+                code = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+                content = str(row[content_idx]).strip() if len(row) > content_idx and row[content_idx] else ""
+                if not content:
+                    continue
+                if kind in ("이번주숙제", "이번주 숙제", "숙제", "homework"):
+                    homework = content
+                elif kind in ("한마디", "신쌤의한마디", "신쌤의 한마디", "메시지", "message"):
+                    messages.append({"student_code": code, "content": content})
 
     return students, records, homework, messages
 
@@ -181,16 +189,18 @@ def save_data(students=None, records=None, homework=None, messages=None):
         ])
 
     ws3 = wb.create_sheet("공지사항")
-    ws3.append(["종류", "대상학생코드", "내용"])
+    ws3.append(["종류", "대상학생코드", "학생이름", "내용"])
     if homework:
-        ws3.append(["이번주숙제", "", homework])
+        ws3.append(["이번주숙제", "", "", homework])
     for m in messages:
-        ws3.append(["한마디", m.get("student_code", ""), m.get("content", "")])
+        code = m.get("student_code", "")
+        name = students.get(code, {}).get("name", "") if code else ""
+        ws3.append(["한마디", code, name, m.get("content", "")])
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
         (ws2, [12, 10, 12, 14, 8, 50]),
-        (ws3, [14, 14, 60]),
+        (ws3, [14, 14, 12, 60]),
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
@@ -426,26 +436,67 @@ def admin():
 
                 if mode == "append":
                     current = load_data()
+
+                    # 학생: 신규 코드만 추가, 기존 코드는 건너뜀
                     merged_students = dict(current["students"])
                     added_students = 0
+                    skipped_students = 0
                     for code, s in new_students.items():
                         if code not in merged_students:
                             merged_students[code] = s
                             added_students += 1
+                        else:
+                            skipped_students += 1
 
-                    merged_records = current["records"] + new_records
-                    # 이번주 숙제: 업로드 파일에 있으면 교체, 없으면 기존 유지
+                    # 기록 중복 판별: (날짜, 학생코드, 항목, 점수, 피드백) 5개 모두 일치
+                    def _rec_key(r):
+                        return (r.get("date", ""), r.get("student_code", ""),
+                                r.get("category", ""), r.get("score", ""),
+                                r.get("feedback", ""))
+                    seen_recs = {_rec_key(r) for r in current["records"]}
+                    unique_records = []
+                    skipped_records = 0
+                    for r in new_records:
+                        k = _rec_key(r)
+                        if k in seen_recs:
+                            skipped_records += 1
+                        else:
+                            seen_recs.add(k)
+                            unique_records.append(r)
+                    merged_records = current["records"] + unique_records
+
+                    # 이번주 숙제: 업로드 파일에 있으면 교체
+                    homework_changed = bool(new_homework) and new_homework != current["homework"]
                     final_homework = new_homework if new_homework else current["homework"]
-                    # 한마디: 기존 + 신규 모두 보존
-                    merged_messages = current["messages"] + new_messages
+
+                    # 한마디 중복 판별: (학생코드, 내용) 모두 일치
+                    def _msg_key(m):
+                        return (m.get("student_code", ""), m.get("content", ""))
+                    seen_msgs = {_msg_key(m) for m in current["messages"]}
+                    unique_msgs = []
+                    skipped_msgs = 0
+                    for m in new_messages:
+                        k = _msg_key(m)
+                        if k in seen_msgs:
+                            skipped_msgs += 1
+                        else:
+                            seen_msgs.add(k)
+                            unique_msgs.append(m)
+                    merged_messages = current["messages"] + unique_msgs
 
                     save_data(merged_students, merged_records, final_homework, merged_messages)
-                    parts = [f"신규 학생 {added_students}명", f"기록 {len(new_records)}건"]
-                    if new_homework:
-                        parts.append("이번주 숙제 교체")
-                    if new_messages:
-                        parts.append(f"한마디 {len(new_messages)}건")
-                    flash(f"추가 완료: {', '.join(parts)} 적용됨.", "success")
+
+                    # 결과 메시지 조립
+                    parts = []
+                    parts.append(f"신규 학생 {added_students}명" +
+                                 (f" (중복 {skipped_students}명 건너뜀)" if skipped_students else ""))
+                    parts.append(f"새 기록 {len(unique_records)}건" +
+                                 (f" (중복 {skipped_records}건 건너뜀)" if skipped_records else ""))
+                    if homework_changed:
+                        parts.append("이번주 숙제 갱신")
+                    parts.append(f"새 한마디 {len(unique_msgs)}건" +
+                                 (f" (중복 {skipped_msgs}건 건너뜀)" if skipped_msgs else ""))
+                    flash("추가 완료: " + " · ".join(parts), "success")
                 else:
                     # 덮어쓰기: 전체 교체
                     save_data(new_students, new_records, new_homework, new_messages)
@@ -727,15 +778,15 @@ def download_template():
                 "문법 파트에서 2개 틀렸습니다. 복습 권장."])
 
     ws3 = wb.create_sheet("공지사항")
-    ws3.append(["종류", "대상학생코드", "내용"])
-    ws3.append(["이번주숙제", "", "워크북 32-45쪽 풀고, 단어 50개 외워오기"])
-    ws3.append(["한마디", "", "시험 기간 화이팅! 모두 잘 할 수 있을거예요."])
-    ws3.append(["한마디", "S001", "단어시험 1등 축하해요. 다음주도 기대할게요!"])
+    ws3.append(["종류", "대상학생코드", "학생이름", "내용"])
+    ws3.append(["이번주숙제", "", "", "워크북 32-45쪽 풀고, 단어 50개 외워오기"])
+    ws3.append(["한마디", "", "", "시험 기간 화이팅! 모두 잘 할 수 있을거예요."])
+    ws3.append(["한마디", "S001", "김민지", "단어시험 1등 축하해요. 다음주도 기대할게요!"])
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
         (ws2, [12, 10, 12, 14, 8, 50]),
-        (ws3, [14, 14, 60]),
+        (ws3, [14, 14, 12, 60]),
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
