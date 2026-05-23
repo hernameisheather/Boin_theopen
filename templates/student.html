@@ -9,6 +9,29 @@
   <a href="{{ url_for('logout') }}" class="btn-ghost">로그아웃</a>
 </header>
 
+{% if homework %}
+<section class="card homework-card">
+  <h2>📚 이번주 숙제</h2>
+  <p class="homework-text">{{ homework }}</p>
+</section>
+{% endif %}
+
+{% if messages %}
+<section class="card message-card">
+  <h2>💬 신쌤의 한마디</h2>
+  {% for m in messages %}
+  <div class="message-item {% if not m.student_code %}message-broadcast{% else %}message-personal{% endif %}">
+    {% if not m.student_code %}
+    <span class="message-tag">📣 전체</span>
+    {% else %}
+    <span class="message-tag personal">⭐ {{ student.name }}에게</span>
+    {% endif %}
+    <p>{{ m.content }}</p>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% if stats %}
 <section class="stats-grid">
   {% for cat, s in stats.items() %}

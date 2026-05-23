@@ -205,6 +205,73 @@ pre {
 .diff-up   { color: #16a34a; font-weight: 600; }
 .diff-down { color: #dc2626; font-weight: 600; }
 
+/* ─── 공지사항 (이번주 숙제 / 한마디) ──────────────────── */
+.homework-card {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fcd34d;
+}
+.homework-card h2 { color: #92400e; }
+.homework-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 1.02rem;
+  color: #78350f;
+}
+
+.message-card {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  border: 1px solid #c4b5fd;
+}
+.message-card h2 { color: #5b21b6; }
+.message-item {
+  background: white;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  border-left: 4px solid #8b5cf6;
+}
+.message-item.message-personal {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+.message-item p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  color: var(--text);
+}
+.message-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+.message-tag.personal {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tag-broadcast {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: #ede9fe;
+  color: #5b21b6;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-mini-danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.btn-mini-danger:hover { background: #fecaca; }
+
 /* ─── 추세 그래프 ──────────────────────────────────────── */
 .chart-wrap {
   margin: 4px 0 18px;

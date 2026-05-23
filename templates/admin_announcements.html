@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}공지사항 관리{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <h1>📢 공지사항 관리</h1>
+  <p class="muted small">이번주 숙제 + 신쌤의 한마디 (전체/개별)</p>
+</header>
+
+<section class="card">
+  <h2>📚 이번주 숙제 <span class="muted small">(모든 학생/학부모에게 표시)</span></h2>
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="update_homework">
+    <textarea name="homework" rows="3" placeholder="예: 워크북 32-45쪽 풀고, 단어 50개 외워오기">{{ homework }}</textarea>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">저장</button>
+      <span class="muted small">비워두고 저장하면 숙제 표시가 사라집니다.</span>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>💬 신쌤의 한마디 추가</h2>
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="add_message">
+    <div class="form-row">
+      <label>
+        <span>대상</span>
+        <select name="student_code">
+          <option value="">📣 전체 학생</option>
+          {% for code, s in students.items() %}
+          <option value="{{ code }}">{{ s.name }} ({{ code }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <label>
+      <span>내용</span>
+      <textarea name="content" rows="3" placeholder="학생에게 전달할 격려/안내/축하 메시지" required></textarea>
+    </label>
+    <button type="submit" class="btn-primary">한마디 추가</button>
+  </form>
+</section>
+
+{% if messages %}
+<section class="card">
+  <h2>📋 등록된 한마디 ({{ messages|length }}건)</h2>
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:140px">대상</th>
+        <th>내용</th>
+        <th style="width:80px">작업</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in messages %}
+      <tr>
+        <td>
+          {% if m.student_code %}
+            {{ students.get(m.student_code, {}).get('name', '?') }}
+            <br><code class="muted small">{{ m.student_code }}</code>
+          {% else %}
+            <span class="tag-broadcast">📣 전체</span>
+          {% endif %}
+        </td>
+        <td class="feedback">{{ m.content }}</td>
+        <td>
+          <form method="post" style="display:inline;" onsubmit="return confirm('이 한마디를 삭제하시겠습니까?');">
+            <input type="hidden" name="action" value="delete_message">
+            <input type="hidden" name="idx" value="{{ loop.index0 }}">
+            <button type="submit" class="btn-mini btn-mini-danger">삭제</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="card empty">
+  <p>아직 등록된 한마디가 없습니다. 위에서 추가하세요.</p>
+</section>
+{% endif %}
+{% endblock %}

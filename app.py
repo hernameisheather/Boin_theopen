@@ -36,7 +36,13 @@ app.secret_key = APP_SECRET
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
 
 # ─── 데이터 ──────────────────────────────────────────────────
-_data_cache = {"mtime": 0, "students": {}, "records": []}
+_data_cache = {
+    "mtime": 0,
+    "students": {},
+    "records": [],
+    "homework": "",       # 이번주 숙제 (전체 공통, 단일 값)
+    "messages": [],       # 신쌤의 한마디: [{"student_code": "", "content": "..."}]
+}
 
 
 def _parse_date(v):
@@ -48,10 +54,11 @@ def _parse_date(v):
 
 
 def _parse_workbook(wb):
-    """openpyxl Workbook을 students/records로 파싱.
+    """openpyxl Workbook을 (students, records, homework, messages)로 파싱.
     `기록` 시트는 두 가지 형식 모두 자동 감지:
       - 신형식: 날짜 | 학생코드 | 학생이름 | 항목 | 점수 | 피드백
       - 구형식: 날짜 | 학생코드 | 항목 | 점수 | 피드백
+    `공지사항` 시트(선택): 종류 | 대상학생코드 | 내용
     """
     students = {}
     if "학생명단" in wb.sheetnames:
@@ -71,7 +78,6 @@ def _parse_workbook(wb):
         ws = wb["기록"]
         rows = list(ws.iter_rows(values_only=True))
         if rows:
-            # 헤더 행으로 형식 판별
             header = [str(c).strip() if c is not None else "" for c in rows[0]]
             has_name_col = len(header) >= 3 and header[2] in ("학생이름", "이름", "name", "Name")
 
@@ -79,7 +85,6 @@ def _parse_workbook(wb):
                 if not row or row[0] is None or (len(row) > 1 and row[1] is None):
                     continue
                 if has_name_col:
-                    # 신형식
                     records.append({
                         "date": _parse_date(row[0]),
                         "student_code": str(row[1]).strip(),
@@ -88,7 +93,6 @@ def _parse_workbook(wb):
                         "feedback": str(row[5]).strip() if len(row) > 5 and row[5] else "",
                     })
                 else:
-                    # 구형식
                     records.append({
                         "date": _parse_date(row[0]),
                         "student_code": str(row[1]).strip(),
@@ -97,13 +101,30 @@ def _parse_workbook(wb):
                         "feedback": str(row[4]).strip() if len(row) > 4 and row[4] else "",
                     })
 
-    return students, records
+    homework = ""
+    messages = []
+    if "공지사항" in wb.sheetnames:
+        ws = wb["공지사항"]
+        for row in list(ws.iter_rows(values_only=True))[1:]:
+            if not row or row[0] is None:
+                continue
+            kind = str(row[0]).strip()
+            code = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            content = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+            if not content:
+                continue
+            if kind in ("이번주숙제", "이번주 숙제", "숙제", "homework"):
+                homework = content  # 마지막 행이 최종 값
+            elif kind in ("한마디", "신쌤의한마디", "신쌤의 한마디", "메시지", "message"):
+                messages.append({"student_code": code, "content": content})
+
+    return students, records, homework, messages
 
 
 def load_data():
     """Excel을 읽어서 메모리에 캐싱. 파일 수정시각이 바뀌면 재로딩."""
     if not os.path.exists(EXCEL_PATH):
-        _data_cache.update({"mtime": 0, "students": {}, "records": []})
+        _data_cache.update({"mtime": 0, "students": {}, "records": [], "homework": "", "messages": []})
         return _data_cache
 
     mtime = os.path.getmtime(EXCEL_PATH)
@@ -111,14 +132,33 @@ def load_data():
         return _data_cache
 
     wb = load_workbook(EXCEL_PATH, data_only=True)
-    students, records = _parse_workbook(wb)
+    students, records, homework, messages = _parse_workbook(wb)
 
-    _data_cache.update({"mtime": mtime, "students": students, "records": records})
+    _data_cache.update({
+        "mtime": mtime,
+        "students": students,
+        "records": records,
+        "homework": homework,
+        "messages": messages,
+    })
     return _data_cache
 
 
-def save_data(students, records):
-    """현재 메모리 상태를 Excel 파일로 저장 (신형식: 학생이름 컬럼 포함)."""
+def save_data(students=None, records=None, homework=None, messages=None):
+    """현재 메모리 상태를 Excel 파일로 저장.
+    None을 전달하면 현재 캐시 값을 그대로 유지 (덮어쓰기 안 함).
+    """
+    if students is None or records is None or homework is None or messages is None:
+        current = load_data()
+        if students is None:
+            students = current["students"]
+        if records is None:
+            records = current["records"]
+        if homework is None:
+            homework = current["homework"]
+        if messages is None:
+            messages = current["messages"]
+
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
@@ -130,7 +170,7 @@ def save_data(students, records):
     ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백"])
     for r in records:
         code = r.get("student_code", "")
-        name = students.get(code, {}).get("name", "")  # 학생명단에서 자동 채우기
+        name = students.get(code, {}).get("name", "")
         ws2.append([
             r.get("date", ""),
             code,
@@ -140,7 +180,18 @@ def save_data(students, records):
             r.get("feedback", ""),
         ])
 
-    for ws, widths in [(ws1, [10, 12, 8, 18]), (ws2, [12, 10, 12, 14, 8, 50])]:
+    ws3 = wb.create_sheet("공지사항")
+    ws3.append(["종류", "대상학생코드", "내용"])
+    if homework:
+        ws3.append(["이번주숙제", "", homework])
+    for m in messages:
+        ws3.append(["한마디", m.get("student_code", ""), m.get("content", "")])
+
+    for ws, widths in [
+        (ws1, [10, 12, 8, 18]),
+        (ws2, [12, 10, 12, 14, 8, 50]),
+        (ws3, [14, 14, 60]),
+    ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
@@ -150,7 +201,9 @@ def save_data(students, records):
 
 
 def _parse_uploaded_excel(file_storage):
-    """업로드된 Excel 파일을 임시 저장 후 파싱."""
+    """업로드된 Excel 파일을 임시 저장 후 파싱.
+    반환: (students, records, homework, messages)
+    """
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
         file_storage.save(tmp.name)
@@ -316,6 +369,12 @@ def my_page():
         if len(pts) >= 2:
             charts[cat] = _build_chart(pts)
 
+    # 이 학생에게 보여줄 한마디: 공통(빈 코드) + 본인 개별
+    my_messages = [
+        m for m in data["messages"]
+        if not m.get("student_code") or m.get("student_code") == code
+    ]
+
     return render_template(
         "student.html",
         student=student,
@@ -324,6 +383,8 @@ def my_page():
         stats=stats,
         class_avg=class_avg,
         charts=charts,
+        homework=data["homework"],
+        messages=my_messages,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 
@@ -358,38 +419,39 @@ def admin():
                 flash("Excel(.xlsx) 파일만 업로드 가능합니다.", "error")
             else:
                 try:
-                    new_students, new_records = _parse_uploaded_excel(f)
+                    new_students, new_records, new_homework, new_messages = _parse_uploaded_excel(f)
                 except Exception as e:
                     flash(f"엑셀 파일을 읽을 수 없습니다: {e}", "error")
                     return redirect(url_for("admin"))
 
                 if mode == "append":
-                    # 기존 데이터와 병합
                     current = load_data()
                     merged_students = dict(current["students"])
                     added_students = 0
-                    updated_pin_count = 0
                     for code, s in new_students.items():
                         if code not in merged_students:
                             merged_students[code] = s
                             added_students += 1
-                        else:
-                            # 학생코드 중복: 이름/PIN/학부모 정보는 기존 유지 (의도치 않은 덮어쓰기 방지)
-                            pass
 
-                    # 기록은 그대로 추가 (중복 검사 안 함 — 동일 날짜 여러 기록 허용)
                     merged_records = current["records"] + new_records
-                    save_data(merged_students, merged_records)
-                    flash(
-                        f"추가 완료: 신규 학생 {added_students}명, 기록 {len(new_records)}건 추가. "
-                        f"(중복 학생코드는 기존 정보 유지)",
-                        "success"
-                    )
+                    # 이번주 숙제: 업로드 파일에 있으면 교체, 없으면 기존 유지
+                    final_homework = new_homework if new_homework else current["homework"]
+                    # 한마디: 기존 + 신규 모두 보존
+                    merged_messages = current["messages"] + new_messages
+
+                    save_data(merged_students, merged_records, final_homework, merged_messages)
+                    parts = [f"신규 학생 {added_students}명", f"기록 {len(new_records)}건"]
+                    if new_homework:
+                        parts.append("이번주 숙제 교체")
+                    if new_messages:
+                        parts.append(f"한마디 {len(new_messages)}건")
+                    flash(f"추가 완료: {', '.join(parts)} 적용됨.", "success")
                 else:
-                    # 덮어쓰기: 기존 데이터 모두 삭제 후 업로드 내용으로 교체
-                    save_data(new_students, new_records)
+                    # 덮어쓰기: 전체 교체
+                    save_data(new_students, new_records, new_homework, new_messages)
                     flash(
-                        f"덮어쓰기 완료: 학생 {len(new_students)}명, 기록 {len(new_records)}건으로 전체 교체됨.",
+                        f"덮어쓰기 완료: 학생 {len(new_students)}명, 기록 {len(new_records)}건, "
+                        f"한마디 {len(new_messages)}건으로 전체 교체됨.",
                         "success"
                     )
         return redirect(url_for("admin"))
@@ -541,8 +603,9 @@ def admin_student_edit(code):
         if request.form.get("action") == "delete":
             del data["students"][code]
             data["records"] = [r for r in data["records"] if r["student_code"] != code]
-            save_data(data["students"], data["records"])
-            flash(f"학생 '{code}'와(과) 관련된 모든 기록이 삭제되었습니다.", "success")
+            data["messages"] = [m for m in data["messages"] if m.get("student_code") != code]
+            save_data(data["students"], data["records"], data["homework"], data["messages"])
+            flash(f"학생 '{code}'와(과) 관련된 모든 기록·한마디가 삭제되었습니다.", "success")
             return redirect(url_for("admin_students"))
 
         new_code = request.form.get("student_code", "").strip()
@@ -576,6 +639,59 @@ def admin_student_edit(code):
     )
 
 
+# ─── 라우트: 관리자 — 공지사항(이번주 숙제 + 한마디) ────────
+@app.route("/admin/announcements", methods=["GET", "POST"])
+@admin_required
+def admin_announcements():
+    data = load_data()
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "update_homework":
+            new_homework = request.form.get("homework", "").strip()
+            save_data(homework=new_homework)
+            if new_homework:
+                flash("이번주 숙제가 업데이트되었습니다.", "success")
+            else:
+                flash("이번주 숙제가 삭제되었습니다.", "success")
+
+        elif action == "add_message":
+            content = request.form.get("content", "").strip()
+            student_code = request.form.get("student_code", "").strip()
+            if not content:
+                flash("한마디 내용을 입력해주세요.", "error")
+            elif student_code and student_code not in data["students"]:
+                flash("선택한 학생코드가 존재하지 않습니다.", "error")
+            else:
+                new_messages = data["messages"] + [{"student_code": student_code, "content": content}]
+                save_data(messages=new_messages)
+                target = data["students"][student_code]["name"] if student_code else "전체"
+                flash(f"한마디가 추가되었습니다. (대상: {target})", "success")
+
+        elif action == "delete_message":
+            try:
+                idx = int(request.form.get("idx", -1))
+            except ValueError:
+                idx = -1
+            if 0 <= idx < len(data["messages"]):
+                new_messages = list(data["messages"])
+                del new_messages[idx]
+                save_data(messages=new_messages)
+                flash("한마디가 삭제되었습니다.", "success")
+            else:
+                flash("삭제할 한마디를 찾을 수 없습니다.", "error")
+
+        return redirect(url_for("admin_announcements"))
+
+    return render_template(
+        "admin_announcements.html",
+        homework=data["homework"],
+        messages=data["messages"],
+        students=data["students"],
+    )
+
+
 # ─── 라우트: Excel 다운로드/템플릿 ───────────────────────────
 @app.route("/admin/download")
 @admin_required
@@ -594,7 +710,7 @@ def admin_download():
 
 @app.route("/admin/template")
 def download_template():
-    """빈 Excel 템플릿 다운로드 (신형식: 학생이름 컬럼 포함)."""
+    """빈 Excel 템플릿 다운로드 (3시트: 학생명단, 기록, 공지사항)."""
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
@@ -610,7 +726,17 @@ def download_template():
     ws2.append(["2026-05-18", "S002", "이도윤", "Daily Test", "85",
                 "문법 파트에서 2개 틀렸습니다. 복습 권장."])
 
-    for ws, widths in [(ws1, [10, 12, 8, 18]), (ws2, [12, 10, 12, 14, 8, 50])]:
+    ws3 = wb.create_sheet("공지사항")
+    ws3.append(["종류", "대상학생코드", "내용"])
+    ws3.append(["이번주숙제", "", "워크북 32-45쪽 풀고, 단어 50개 외워오기"])
+    ws3.append(["한마디", "", "시험 기간 화이팅! 모두 잘 할 수 있을거예요."])
+    ws3.append(["한마디", "S001", "단어시험 1등 축하해요. 다음주도 기대할게요!"])
+
+    for ws, widths in [
+        (ws1, [10, 12, 8, 18]),
+        (ws2, [12, 10, 12, 14, 8, 50]),
+        (ws3, [14, 14, 60]),
+    ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
