@@ -385,6 +385,38 @@ def my_page():
         if not m.get("student_code") or m.get("student_code") == code
     ]
 
+    # 반 등수 계산: (날짜, 항목) 단위로 응시한 학생들 중 본인 순위
+    # 같은 학생이 같은 (날짜, 항목)에 여러 기록이 있으면 최고점으로 순위 산정
+    test_scores = defaultdict(dict)  # (date, cat) -> {code -> best_score}
+    for r in data["records"]:
+        sc = _parse_score(r["score"])
+        if sc is None or not r["date"]:
+            continue
+        k = (r["date"], r["category"] or "기타")
+        sc_code = r["student_code"]
+        if sc_code not in test_scores[k] or sc > test_scores[k][sc_code]:
+            test_scores[k][sc_code] = sc
+
+    # 경쟁식 순위 (동점은 같은 등수, 다음 등수는 인원만큼 건너뜀): 1, 2, 2, 4
+    ranks = {}  # "date|code|category" -> (rank, total)
+    for (d, cat), code_scores in test_scores.items():
+        if len(code_scores) < 2:
+            continue  # 응시자 1명이면 등수 의미 없음
+        sorted_entries = sorted(code_scores.items(), key=lambda x: -x[1])
+        prev_score = None
+        current_rank = 0
+        for i, (c, s) in enumerate(sorted_entries):
+            if s != prev_score:
+                current_rank = i + 1
+                prev_score = s
+            ranks[f"{d}|{c}|{cat}"] = (current_rank, len(code_scores))
+
+    # 날짜별 그룹핑 (이 학생만, 날짜 내림차순)
+    by_date_dict = defaultdict(list)
+    for r in items:
+        by_date_dict[r["date"]].append(r)
+    by_date = sorted(by_date_dict.items(), key=lambda x: x[0], reverse=True)
+
     return render_template(
         "student.html",
         student=student,
@@ -395,6 +427,8 @@ def my_page():
         charts=charts,
         homework=data["homework"],
         messages=my_messages,
+        by_date=by_date,
+        ranks=ranks,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 

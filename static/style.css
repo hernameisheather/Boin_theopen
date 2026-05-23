@@ -205,6 +205,56 @@ pre {
 .diff-up   { color: #16a34a; font-weight: 600; }
 .diff-down { color: #dc2626; font-weight: 600; }
 
+/* ─── 날짜별 보기 ──────────────────────────────────────── */
+.day-block {
+  margin-bottom: 22px;
+}
+.day-block:last-child { margin-bottom: 0; }
+.day-header {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 8px 4px 6px;
+  border-bottom: 2px solid #ede9fe;
+  margin-bottom: 6px;
+}
+
+/* ─── 등수 뱃지 ────────────────────────────────────────── */
+.rank-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  line-height: 1.4;
+}
+.rank-badge small {
+  font-weight: 500;
+  opacity: 0.7;
+  font-size: 0.78rem;
+}
+.rank-badge.rank-gold {
+  background: linear-gradient(135deg, #fde68a 0%, #f59e0b 100%);
+  color: #78350f;
+  border-color: #f59e0b;
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);
+}
+.rank-badge.rank-silver {
+  background: linear-gradient(135deg, #e5e7eb 0%, #9ca3af 100%);
+  color: #1f2937;
+  border-color: #9ca3af;
+  box-shadow: 0 1px 4px rgba(156, 163, 175, 0.3);
+}
+.rank-badge.rank-bronze {
+  background: linear-gradient(135deg, #fed7aa 0%, #c2410c 100%);
+  color: #7c2d12;
+  border-color: #c2410c;
+  box-shadow: 0 1px 4px rgba(194, 65, 12, 0.3);
+}
+
 /* ─── 공지사항 (이번주 숙제 / 한마디) ──────────────────── */
 .homework-card {
   background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);

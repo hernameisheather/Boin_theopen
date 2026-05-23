@@ -59,9 +59,52 @@
   <p>아직 등록된 기록이 없습니다.</p>
 </div>
 {% else %}
+
+{% if by_date %}
+<section class="card">
+  <h2>📅 날짜별 시험 결과</h2>
+  <p class="muted small">시행 날짜 기준으로 같은 날 본 모든 항목을 한 번에 확인하세요.</p>
+  {% for date, day_items in by_date %}
+  <div class="day-block">
+    <div class="day-header">📌 {{ date }}</div>
+    <table class="records">
+      <thead>
+        <tr>
+          <th style="width:140px">항목</th>
+          <th style="width:90px">점수/결과</th>
+          <th style="width:110px">반 등수</th>
+          <th>피드백</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in day_items %}
+        <tr>
+          <td><b>{{ r.category }}</b></td>
+          <td class="score">{{ r.score }}</td>
+          <td>
+            {% set rkey = r.date ~ '|' ~ r.student_code ~ '|' ~ r.category %}
+            {% set rk = ranks.get(rkey) %}
+            {% if rk %}
+              <span class="rank-badge {% if rk[0] == 1 %}rank-gold{% elif rk[0] == 2 %}rank-silver{% elif rk[0] == 3 %}rank-bronze{% endif %}">
+                {{ rk[0] }}등 <small>/ {{ rk[1] }}명</small>
+              </span>
+            {% else %}
+              <span class="muted small">—</span>
+            {% endif %}
+          </td>
+          <td class="feedback">{{ r.feedback }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
   {% for category, items in grouped.items() %}
   <section class="card">
-    <h2>{{ category }}</h2>
+    <h2>{{ category }} <span class="muted small">— 항목별 보기</span></h2>
 
     {% if charts.get(category) %}
     {% set chart = charts[category] %}
@@ -105,6 +148,7 @@
         <tr>
           <th style="width:120px">날짜</th>
           <th style="width:90px">점수/결과</th>
+          <th style="width:110px">반 등수</th>
           <th>피드백</th>
         </tr>
       </thead>
@@ -113,6 +157,17 @@
         <tr>
           <td>{{ r.date }}</td>
           <td class="score">{{ r.score }}</td>
+          <td>
+            {% set rkey = r.date ~ '|' ~ r.student_code ~ '|' ~ r.category %}
+            {% set rk = ranks.get(rkey) %}
+            {% if rk %}
+              <span class="rank-badge {% if rk[0] == 1 %}rank-gold{% elif rk[0] == 2 %}rank-silver{% elif rk[0] == 3 %}rank-bronze{% endif %}">
+                {{ rk[0] }}등 <small>/ {{ rk[1] }}명</small>
+              </span>
+            {% else %}
+              <span class="muted small">—</span>
+            {% endif %}
+          </td>
           <td class="feedback">{{ r.feedback }}</td>
         </tr>
         {% endfor %}
