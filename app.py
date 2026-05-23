@@ -47,18 +47,12 @@ def _parse_date(v):
     return str(v).strip()
 
 
-def load_data():
-    """Excel을 읽어서 메모리에 캐싱. 파일 수정시각이 바뀌면 재로딩."""
-    if not os.path.exists(EXCEL_PATH):
-        _data_cache.update({"mtime": 0, "students": {}, "records": []})
-        return _data_cache
-
-    mtime = os.path.getmtime(EXCEL_PATH)
-    if mtime == _data_cache["mtime"]:
-        return _data_cache
-
-    wb = load_workbook(EXCEL_PATH, data_only=True)
-
+def _parse_workbook(wb):
+    """openpyxl Workbook을 students/records로 파싱.
+    `기록` 시트는 두 가지 형식 모두 자동 감지:
+      - 신형식: 날짜 | 학생코드 | 학생이름 | 항목 | 점수 | 피드백
+      - 구형식: 날짜 | 학생코드 | 항목 | 점수 | 피드백
+    """
     students = {}
     if "학생명단" in wb.sheetnames:
         ws = wb["학생명단"]
@@ -75,23 +69,56 @@ def load_data():
     records = []
     if "기록" in wb.sheetnames:
         ws = wb["기록"]
-        for row in list(ws.iter_rows(values_only=True))[1:]:
-            if not row or row[0] is None or (len(row) > 1 and row[1] is None):
-                continue
-            records.append({
-                "date": _parse_date(row[0]),
-                "student_code": str(row[1]).strip(),
-                "category": str(row[2]).strip() if len(row) > 2 and row[2] else "",
-                "score": str(row[3]).strip() if len(row) > 3 and row[3] is not None else "",
-                "feedback": str(row[4]).strip() if len(row) > 4 and row[4] else "",
-            })
+        rows = list(ws.iter_rows(values_only=True))
+        if rows:
+            # 헤더 행으로 형식 판별
+            header = [str(c).strip() if c is not None else "" for c in rows[0]]
+            has_name_col = len(header) >= 3 and header[2] in ("학생이름", "이름", "name", "Name")
+
+            for row in rows[1:]:
+                if not row or row[0] is None or (len(row) > 1 and row[1] is None):
+                    continue
+                if has_name_col:
+                    # 신형식
+                    records.append({
+                        "date": _parse_date(row[0]),
+                        "student_code": str(row[1]).strip(),
+                        "category": str(row[3]).strip() if len(row) > 3 and row[3] else "",
+                        "score": str(row[4]).strip() if len(row) > 4 and row[4] is not None else "",
+                        "feedback": str(row[5]).strip() if len(row) > 5 and row[5] else "",
+                    })
+                else:
+                    # 구형식
+                    records.append({
+                        "date": _parse_date(row[0]),
+                        "student_code": str(row[1]).strip(),
+                        "category": str(row[2]).strip() if len(row) > 2 and row[2] else "",
+                        "score": str(row[3]).strip() if len(row) > 3 and row[3] is not None else "",
+                        "feedback": str(row[4]).strip() if len(row) > 4 and row[4] else "",
+                    })
+
+    return students, records
+
+
+def load_data():
+    """Excel을 읽어서 메모리에 캐싱. 파일 수정시각이 바뀌면 재로딩."""
+    if not os.path.exists(EXCEL_PATH):
+        _data_cache.update({"mtime": 0, "students": {}, "records": []})
+        return _data_cache
+
+    mtime = os.path.getmtime(EXCEL_PATH)
+    if mtime == _data_cache["mtime"]:
+        return _data_cache
+
+    wb = load_workbook(EXCEL_PATH, data_only=True)
+    students, records = _parse_workbook(wb)
 
     _data_cache.update({"mtime": mtime, "students": students, "records": records})
     return _data_cache
 
 
 def save_data(students, records):
-    """현재 메모리 상태를 Excel 파일로 저장."""
+    """현재 메모리 상태를 Excel 파일로 저장 (신형식: 학생이름 컬럼 포함)."""
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
@@ -100,23 +127,42 @@ def save_data(students, records):
         ws1.append([code, s.get("name", ""), s.get("pin", ""), s.get("parent", "")])
 
     ws2 = wb.create_sheet("기록")
-    ws2.append(["날짜", "학생코드", "항목", "점수", "피드백"])
+    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백"])
     for r in records:
+        code = r.get("student_code", "")
+        name = students.get(code, {}).get("name", "")  # 학생명단에서 자동 채우기
         ws2.append([
             r.get("date", ""),
-            r.get("student_code", ""),
+            code,
+            name,
             r.get("category", ""),
             r.get("score", ""),
             r.get("feedback", ""),
         ])
 
-    for ws, widths in [(ws1, [10, 12, 8, 18]), (ws2, [12, 10, 14, 8, 50])]:
+    for ws, widths in [(ws1, [10, 12, 8, 18]), (ws2, [12, 10, 12, 14, 8, 50])]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
     wb.save(EXCEL_PATH)
     _data_cache["mtime"] = 0  # 캐시 무효화
     load_data()
+
+
+def _parse_uploaded_excel(file_storage):
+    """업로드된 Excel 파일을 임시 저장 후 파싱."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        file_storage.save(tmp.name)
+        tmp_path = tmp.name
+    try:
+        wb = load_workbook(tmp_path, data_only=True)
+        return _parse_workbook(wb)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def records_for(student_code):
@@ -304,15 +350,48 @@ def admin_login():
 def admin():
     if request.method == "POST" and "excel_file" in request.files:
         f = request.files["excel_file"]
+        mode = request.form.get("mode", "overwrite")
+
         if f.filename:
             filename = secure_filename(f.filename)
             if not filename.lower().endswith((".xlsx", ".xlsm")):
                 flash("Excel(.xlsx) 파일만 업로드 가능합니다.", "error")
             else:
-                f.save(EXCEL_PATH)
-                _data_cache["mtime"] = 0
-                load_data()
-                flash("업로드 완료. 기존 데이터가 새 파일로 덮어씌워졌습니다.", "success")
+                try:
+                    new_students, new_records = _parse_uploaded_excel(f)
+                except Exception as e:
+                    flash(f"엑셀 파일을 읽을 수 없습니다: {e}", "error")
+                    return redirect(url_for("admin"))
+
+                if mode == "append":
+                    # 기존 데이터와 병합
+                    current = load_data()
+                    merged_students = dict(current["students"])
+                    added_students = 0
+                    updated_pin_count = 0
+                    for code, s in new_students.items():
+                        if code not in merged_students:
+                            merged_students[code] = s
+                            added_students += 1
+                        else:
+                            # 학생코드 중복: 이름/PIN/학부모 정보는 기존 유지 (의도치 않은 덮어쓰기 방지)
+                            pass
+
+                    # 기록은 그대로 추가 (중복 검사 안 함 — 동일 날짜 여러 기록 허용)
+                    merged_records = current["records"] + new_records
+                    save_data(merged_students, merged_records)
+                    flash(
+                        f"추가 완료: 신규 학생 {added_students}명, 기록 {len(new_records)}건 추가. "
+                        f"(중복 학생코드는 기존 정보 유지)",
+                        "success"
+                    )
+                else:
+                    # 덮어쓰기: 기존 데이터 모두 삭제 후 업로드 내용으로 교체
+                    save_data(new_students, new_records)
+                    flash(
+                        f"덮어쓰기 완료: 학생 {len(new_students)}명, 기록 {len(new_records)}건으로 전체 교체됨.",
+                        "success"
+                    )
         return redirect(url_for("admin"))
 
     data = load_data()
@@ -515,7 +594,7 @@ def admin_download():
 
 @app.route("/admin/template")
 def download_template():
-    """빈 Excel 템플릿 다운로드."""
+    """빈 Excel 템플릿 다운로드 (신형식: 학생이름 컬럼 포함)."""
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
@@ -524,12 +603,14 @@ def download_template():
     ws1.append(["S002", "이도윤", "5678", "이도윤 어머니"])
 
     ws2 = wb.create_sheet("기록")
-    ws2.append(["날짜", "학생코드", "항목", "점수", "피드백"])
-    ws2.append(["2026-05-18", "S001", "Daily Test", "92",
+    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백"])
+    ws2.append(["2026-05-18", "S001", "김민지", "Daily Test", "92",
                 "어휘 문제에서 실수가 있었지만 독해는 완벽했습니다."])
-    ws2.append(["2026-05-18", "S001", "숙제", "완료", "꼼꼼하게 잘 했습니다."])
+    ws2.append(["2026-05-18", "S001", "김민지", "숙제", "완료", "꼼꼼하게 잘 했습니다."])
+    ws2.append(["2026-05-18", "S002", "이도윤", "Daily Test", "85",
+                "문법 파트에서 2개 틀렸습니다. 복습 권장."])
 
-    for ws, widths in [(ws1, [10, 12, 8, 18]), (ws2, [12, 10, 14, 8, 50])]:
+    for ws, widths in [(ws1, [10, 12, 8, 18]), (ws2, [12, 10, 12, 14, 8, 50])]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 

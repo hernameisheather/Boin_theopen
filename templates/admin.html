@@ -34,25 +34,36 @@
 </section>
 
 <section class="card">
-  <h2>📤 Excel 일괄 업로드 (선택)</h2>
-  <p class="muted">학기 초나 데이터 복원 시 사용. <b>주의: 업로드하면 현재 데이터가 모두 덮어씌워집니다.</b></p>
-  <form method="post" enctype="multipart/form-data" class="form upload-form">
+  <h2>📤 Excel 일괄 업로드</h2>
+  <p class="muted">파일을 선택한 후 모드를 선택해서 업로드하세요.</p>
+  <form method="post" enctype="multipart/form-data" class="form">
     <input type="file" name="excel_file" accept=".xlsx,.xlsm" required>
-    <button type="submit" class="btn-primary" onclick="return confirm('현재 등록된 학생 {{ students|length }}명, 기록 {{ record_count }}건이 모두 새 파일로 덮어씌워집니다. 계속하시겠습니까?');">업로드</button>
+    <div class="upload-modes">
+      <button type="submit" name="mode" value="append" class="btn-primary">
+        ➕ 추가 모드
+        <small>기존 데이터 유지 + 새 내용만 추가</small>
+      </button>
+      <button type="submit" name="mode" value="overwrite" class="btn-danger"
+              onclick="return confirm('⚠️ 덮어쓰기 경고\n\n현재 데이터(학생 {{ students|length }}명, 기록 {{ record_count }}건)가 모두 삭제되고 업로드 파일로 전체 교체됩니다.\n\n계속하시겠습니까?');">
+        ⚠️ 덮어쓰기 모드
+        <small>현재 데이터 전체 삭제 후 교체</small>
+      </button>
+    </div>
   </form>
   <p class="hint">
-    📄 <a href="{{ url_for('download_template') }}">빈 Excel 템플릿 다운로드</a> · 시트 2개 필요: <b>학생명단</b>, <b>기록</b>
+    📄 <a href="{{ url_for('download_template') }}">빈 Excel 템플릿 다운로드</a>
   </p>
 </section>
 
 <section class="card info">
-  <h2>📖 Excel 형식 안내</h2>
+  <h2>📖 Excel 형식 안내 (신·구 모두 지원)</h2>
   <p><b>시트 1: 학생명단</b></p>
   <pre>학생코드 | 학생이름 | PIN  | 학부모이름(선택)
 S001    | 김민지   | 1234 | 김민지 어머니</pre>
-  <p><b>시트 2: 기록</b></p>
-  <pre>날짜       | 학생코드 | 항목        | 점수 | 피드백
-2026-05-18 | S001    | Daily Test  | 92   | 어휘에서 실수가 있었지만 ...
-2026-05-18 | S001    | 숙제        | 완료 | 꼼꼼하게 잘 했습니다.</pre>
+  <p><b>시트 2: 기록</b> <span class="muted small">(권장 신형식)</span></p>
+  <pre>날짜       | 학생코드 | 학생이름 | 항목        | 점수 | 피드백
+2026-05-18 | S001    | 김민지   | Daily Test  | 92   | 어휘에서 실수가 ...
+2026-05-18 | S001    | 김민지   | 숙제        | 완료 | 꼼꼼하게 잘 했습니다.</pre>
+  <p class="muted small">💡 학생이름 컬럼은 선생님이 Excel에서 직접 편집할 때 누구 점수인지 확인하기 쉽도록 추가된 항목입니다. 시스템은 학생코드만 사용하므로 비워두거나 임시 이름이어도 OK. 구형식(학생이름 컬럼 없음)도 그대로 지원됩니다.</p>
 </section>
 {% endblock %}
