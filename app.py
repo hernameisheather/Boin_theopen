@@ -385,21 +385,21 @@ def my_page():
         if not m.get("student_code") or m.get("student_code") == code
     ]
 
-    # 반 등수 계산: (날짜, 항목) 단위로 응시한 학생들 중 본인 순위
-    # 같은 학생이 같은 (날짜, 항목)에 여러 기록이 있으면 최고점으로 순위 산정
-    test_scores = defaultdict(dict)  # (date, cat) -> {code -> best_score}
+    # 반 등수 계산: 항목명 기준 (날짜 무관, 모든 반 통합)
+    # 같은 학생이 같은 항목에 여러 점수가 있으면 최고점 기준으로 순위 산정
+    cat_best = defaultdict(dict)  # cat -> {code -> best_score}
     for r in data["records"]:
         sc = _parse_score(r["score"])
-        if sc is None or not r["date"]:
+        if sc is None:
             continue
-        k = (r["date"], r["category"] or "기타")
+        cat = r["category"] or "기타"
         sc_code = r["student_code"]
-        if sc_code not in test_scores[k] or sc > test_scores[k][sc_code]:
-            test_scores[k][sc_code] = sc
+        if sc_code not in cat_best[cat] or sc > cat_best[cat][sc_code]:
+            cat_best[cat][sc_code] = sc
 
     # 경쟁식 순위 (동점은 같은 등수, 다음 등수는 인원만큼 건너뜀): 1, 2, 2, 4
-    ranks = {}  # "date|code|category" -> (rank, total)
-    for (d, cat), code_scores in test_scores.items():
+    ranks = {}  # "code|category" -> (rank, total)
+    for cat, code_scores in cat_best.items():
         if len(code_scores) < 2:
             continue  # 응시자 1명이면 등수 의미 없음
         sorted_entries = sorted(code_scores.items(), key=lambda x: -x[1])
@@ -409,7 +409,7 @@ def my_page():
             if s != prev_score:
                 current_rank = i + 1
                 prev_score = s
-            ranks[f"{d}|{c}|{cat}"] = (current_rank, len(code_scores))
+            ranks[f"{c}|{cat}"] = (current_rank, len(code_scores))
 
     # 날짜별 그룹핑 (이 학생만, 날짜 내림차순)
     by_date_dict = defaultdict(list)

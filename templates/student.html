@@ -39,11 +39,20 @@
 {% endif %}
 
 {% if stats %}
+{% set scode = session.get('student_code', '') %}
 <section class="stats-grid">
   {% for cat, s in stats.items() %}
   <div class="stat-card">
     <div class="stat-cat">{{ cat }}</div>
     <div class="stat-avg">{{ s.avg }}<span class="stat-unit">점 평균</span></div>
+    {% set crank = ranks.get(scode ~ '|' ~ cat) %}
+    {% if crank %}
+    <div class="stat-rank">
+      <span class="rank-badge {% if crank[0] == 1 %}rank-gold{% elif crank[0] == 2 %}rank-silver{% elif crank[0] == 3 %}rank-bronze{% endif %}">
+        🏆 종합 {{ crank[0] }}등 <small>/ {{ crank[1] }}명</small>
+      </span>
+    </div>
+    {% endif %}
     <div class="stat-meta">
       {% if class_avg.get(cat) is not none %}
         반 평균 <b>{{ class_avg[cat] }}</b>점
@@ -88,7 +97,7 @@
           <td><b>{{ r.category }}</b></td>
           <td class="score">{{ r.score }}</td>
           <td>
-            {% set rkey = r.date ~ '|' ~ r.student_code ~ '|' ~ r.category %}
+            {% set rkey = r.student_code ~ '|' ~ r.category %}
             {% set rk = ranks.get(rkey) %}
             {% if rk %}
               <span class="rank-badge {% if rk[0] == 1 %}rank-gold{% elif rk[0] == 2 %}rank-silver{% elif rk[0] == 3 %}rank-bronze{% endif %}">
@@ -164,7 +173,7 @@
           <td>{{ r.date }}</td>
           <td class="score">{{ r.score }}</td>
           <td>
-            {% set rkey = r.date ~ '|' ~ r.student_code ~ '|' ~ r.category %}
+            {% set rkey = r.student_code ~ '|' ~ r.category %}
             {% set rk = ranks.get(rkey) %}
             {% if rk %}
               <span class="rank-badge {% if rk[0] == 1 %}rank-gold{% elif rk[0] == 2 %}rank-silver{% elif rk[0] == 3 %}rank-bronze{% endif %}">

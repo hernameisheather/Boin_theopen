@@ -200,6 +200,7 @@ pre {
   line-height: 1.1;
 }
 .stat-unit { font-size: 0.85rem; color: var(--muted); margin-left: 4px; font-weight: 500; }
+.stat-rank { margin: 6px 0 4px; }
 .stat-meta { color: var(--muted); font-size: 0.8rem; margin-top: 6px; line-height: 1.5; }
 .stat-meta b { color: var(--text); }
 .diff-up   { color: #16a34a; font-weight: 600; }
