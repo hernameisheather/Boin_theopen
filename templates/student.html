@@ -4,17 +4,23 @@
 <header class="page-header">
   <div>
     <h1>{{ student.name }} <span class="muted">학생</span></h1>
+    <p class="favorite-tag">❤️ 신쌤의 애제자 <b>"{{ student.name }}"</b></p>
     <p class="muted small">마지막 업데이트: {{ last_update }}</p>
   </div>
   <a href="{{ url_for('logout') }}" class="btn-ghost">로그아웃</a>
 </header>
 
-{% if homework %}
 <section class="card homework-card">
   <h2>📚 이번주 숙제</h2>
+  {% if homework %}
   <p class="homework-text">{{ homework }}</p>
+  {% else %}
+  <p class="muted">이번주 숙제는 아직 등록되지 않았습니다.</p>
+  {% endif %}
+  <div class="contact-info">
+    📞 <b>신쌤 번호</b>: <a href="tel:01059390080">010-5939-0080</a>
+  </div>
 </section>
-{% endif %}
 
 {% if messages %}
 <section class="card message-card">

@@ -255,6 +255,37 @@ pre {
   box-shadow: 0 1px 4px rgba(194, 65, 12, 0.3);
 }
 
+/* ─── 브랜드 로고 (로그인 페이지) ────────────────────── */
+.brand-title {
+  font-size: 1.45rem;
+  line-height: 1.4;
+  margin-bottom: 12px;
+  color: #b91c1c;
+  letter-spacing: -0.5px;
+}
+.brand-sub {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 1.2rem;
+  color: #dc2626;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  padding: 2px 12px;
+  border-radius: 6px;
+}
+
+/* ─── 신쌤의 애제자 태그 ───────────────────────────────── */
+.favorite-tag {
+  margin: 4px 0 2px;
+  font-size: 0.95rem;
+  color: #be123c;
+  background: linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%);
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.favorite-tag b { color: #9f1239; font-weight: 700; }
+
 /* ─── 공지사항 (이번주 숙제 / 한마디) ──────────────────── */
 .homework-card {
   background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
@@ -268,6 +299,19 @@ pre {
   font-size: 1.02rem;
   color: #78350f;
 }
+.contact-info {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #fcd34d;
+  font-size: 0.95rem;
+  color: #78350f;
+}
+.contact-info a {
+  color: #b45309;
+  font-weight: 700;
+  text-decoration: none;
+}
+.contact-info a:hover { text-decoration: underline; }
 
 .message-card {
   background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
