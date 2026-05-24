@@ -81,32 +81,89 @@
 {% else %}
 <section class="card">
   <h2>📊 기록 목록</h2>
-  <table class="records">
-    <thead>
-      <tr>
-        <th style="width:110px">날짜</th>
-        <th style="width:120px">학생</th>
-        <th style="width:110px">항목</th>
-        <th style="width:80px">점수</th>
-        <th>피드백</th>
-        <th style="width:90px">작업</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for idx, r in records %}
-      <tr>
-        <td>{{ r.date }}</td>
-        <td>{{ students.get(r.student_code, {}).get('name', '?') }}<br><code class="muted small">{{ r.student_code }}</code></td>
-        <td>{{ r.category }}</td>
-        <td class="score">{{ r.score }}</td>
-        <td class="feedback">{{ r.feedback }}</td>
-        <td>
-          <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini">수정</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+  <form method="post" id="bulk-form" onsubmit="return confirmBulkDelete();">
+    <input type="hidden" name="action" value="bulk_delete">
+
+    <div class="bulk-toolbar">
+      <label class="bulk-check-label">
+        <input type="checkbox" id="select-all">
+        <span>전체 선택</span>
+      </label>
+      <span class="muted small">선택: <b id="selected-count">0</b>건</span>
+      <button type="submit" class="btn-danger btn-sm" id="bulk-delete-btn" disabled>
+        🗑️ 선택 항목 삭제
+      </button>
+      <span class="muted small bulk-hint">💡 체크박스로 여러 개 선택 → 일괄 삭제</span>
+    </div>
+
+    <table class="records">
+      <thead>
+        <tr>
+          <th style="width:36px"></th>
+          <th style="width:110px">날짜</th>
+          <th style="width:120px">학생</th>
+          <th style="width:110px">항목</th>
+          <th style="width:80px">점수</th>
+          <th>피드백</th>
+          <th style="width:60px">작업</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for idx, r in records %}
+        <tr>
+          <td class="check-cell">
+            <input type="checkbox" class="row-check" name="selected" value="{{ idx }}">
+          </td>
+          <td>{{ r.date }}</td>
+          <td>{{ students.get(r.student_code, {}).get('name', '?') }}<br><code class="muted small">{{ r.student_code }}</code></td>
+          <td>{{ r.category }}</td>
+          <td class="score">{{ r.score }}</td>
+          <td class="feedback">{{ r.feedback }}</td>
+          <td>
+            <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini">수정</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </form>
 </section>
+
+<script>
+  (function() {
+    const selectAll = document.getElementById('select-all');
+    const rowChecks = document.querySelectorAll('.row-check');
+    const countEl = document.getElementById('selected-count');
+    const btnDelete = document.getElementById('bulk-delete-btn');
+
+    function updateCount() {
+      const checked = document.querySelectorAll('.row-check:checked').length;
+      countEl.textContent = checked;
+      btnDelete.disabled = checked === 0;
+      btnDelete.textContent = checked > 0
+        ? '🗑️ 선택 ' + checked + '건 삭제'
+        : '🗑️ 선택 항목 삭제';
+      if (selectAll) {
+        selectAll.checked = checked > 0 && checked === rowChecks.length;
+        selectAll.indeterminate = checked > 0 && checked < rowChecks.length;
+      }
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener('change', function() {
+        rowChecks.forEach(function(cb) { cb.checked = selectAll.checked; });
+        updateCount();
+      });
+    }
+    rowChecks.forEach(function(cb) { cb.addEventListener('change', updateCount); });
+  })();
+
+  function confirmBulkDelete() {
+    const count = document.querySelectorAll('.row-check:checked').length;
+    if (count === 0) return false;
+    return confirm('선택된 ' + count + '건의 기록을 모두 삭제하시겠습니까?\n\n되돌릴 수 없습니다.');
+  }
+</script>
 {% endif %}
 {% endblock %}

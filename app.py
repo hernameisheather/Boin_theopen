@@ -564,6 +564,32 @@ def admin_records():
     data = load_data()
 
     if request.method == "POST":
+        action = request.form.get("action", "add")
+
+        if action == "bulk_delete":
+            # 선택된 인덱스들을 받아서 일괄 삭제
+            raw_indices = request.form.getlist("selected")
+            try:
+                # 중복 제거 + 내림차순 정렬 (뒤에서부터 삭제해서 인덱스 안 꼬이게)
+                indices = sorted({int(i) for i in raw_indices}, reverse=True)
+            except (ValueError, TypeError):
+                indices = []
+
+            if not indices:
+                flash("삭제할 기록을 선택해주세요.", "error")
+            else:
+                removed = 0
+                for i in indices:
+                    if 0 <= i < len(data["records"]):
+                        del data["records"][i]
+                        removed += 1
+                save_data(data["students"], data["records"])
+                flash(f"{removed}건의 기록이 일괄 삭제되었습니다.", "success")
+            return redirect(url_for("admin_records",
+                                    student=request.args.get("student", ""),
+                                    category=request.args.get("category", "")))
+
+        # 기본: 새 기록 추가
         date = request.form.get("date", "").strip()
         student_code = request.form.get("student_code", "").strip()
         category = request.form.get("category", "").strip()
