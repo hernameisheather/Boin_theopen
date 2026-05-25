@@ -900,10 +900,15 @@ def admin_announcements():
 @app.route("/admin/download")
 @admin_required
 def admin_download():
-    """현재 데이터를 Excel 파일로 다운로드 (백업)."""
+    """현재 데이터를 Excel 파일로 다운로드.
+    다운로드 직전에 최신 형식(비고/완료 컬럼 포함)으로 재저장하여 항상 신형식 보장.
+    """
     if not os.path.exists(EXCEL_PATH):
-        flash("아직 데이터가 없습니다.", "error")
+        flash("아직 데이터가 없습니다. 빈 템플릿을 받으시려면 'Excel 템플릿 다운로드'를 이용하세요.", "error")
         return redirect(url_for("admin"))
+    # 신형식 보장을 위해 재저장
+    data = load_data()
+    save_data(data["students"], data["records"], data["homework"], data["messages"])
     return send_file(
         EXCEL_PATH,
         as_attachment=True,
