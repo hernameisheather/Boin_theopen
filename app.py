@@ -15,6 +15,7 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook, Workbook
+from openpyxl.worksheet.datavalidation import DataValidation
 
 # ─── 환경 변수 ────────────────────────────────────────────────
 try:
@@ -174,6 +175,37 @@ def load_data():
     return _data_cache
 
 
+def _add_records_dropdowns(ws):
+    """`기록` 시트의 비고(G열) / 완료(H열)에 드롭다운 추가."""
+    # 비고 컬럼 — 재시/숙제미비/추가과제/결석/우수
+    dv_flag = DataValidation(
+        type="list",
+        formula1='"재시,숙제미비,추가과제,결석,우수"',
+        allow_blank=True,
+        showErrorMessage=True,
+    )
+    dv_flag.error = "재시 / 숙제미비 / 추가과제 / 결석 / 우수 중에서 선택하세요. (자유 입력이 필요하면 데이터 검증 해제 후 입력)"
+    dv_flag.errorTitle = "잘못된 비고"
+    dv_flag.prompt = "드롭다운에서 선택"
+    dv_flag.promptTitle = "비고 선택"
+    ws.add_data_validation(dv_flag)
+    dv_flag.add("G2:G2000")
+
+    # 완료 컬럼 — O / 완료
+    dv_done = DataValidation(
+        type="list",
+        formula1='"O,완료"',
+        allow_blank=True,
+        showErrorMessage=True,
+    )
+    dv_done.error = "처리됐으면 O 또는 완료를, 미처리는 비워두세요."
+    dv_done.errorTitle = "잘못된 완료 표시"
+    dv_done.prompt = "처리됐으면 O 선택"
+    dv_done.promptTitle = "완료 표시"
+    ws.add_data_validation(dv_done)
+    dv_done.add("H2:H2000")
+
+
 def save_data(students=None, records=None, homework=None, messages=None):
     """현재 메모리 상태를 Excel 파일로 저장.
     None을 전달하면 현재 캐시 값을 그대로 유지 (덮어쓰기 안 함).
@@ -228,6 +260,8 @@ def save_data(students=None, records=None, homework=None, messages=None):
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
+
+    _add_records_dropdowns(ws2)
 
     wb.save(EXCEL_PATH)
     _data_cache["mtime"] = 0  # 캐시 무효화
@@ -950,6 +984,8 @@ def download_template():
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
+
+    _add_records_dropdowns(ws2)
 
     buf = io.BytesIO()
     wb.save(buf)
