@@ -3,6 +3,7 @@
   <a href="{{ url_for('admin_records') }}" class="{% if request.endpoint in ['admin_records', 'admin_record_edit'] %}active{% endif %}">📋 기록 관리</a>
   <a href="{{ url_for('admin_students') }}" class="{% if request.endpoint in ['admin_students', 'admin_student_edit'] %}active{% endif %}">👥 학생 관리</a>
   <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">📢 공지사항</a>
+  <a href="{{ url_for('admin_flags') }}" class="{% if request.endpoint == 'admin_flags' %}active{% endif %}">⚠️ 특이사항</a>
   <a href="{{ url_for('admin_download') }}">💾 Excel 다운로드</a>
   <a href="{{ url_for('admin_logout') }}" class="logout">로그아웃</a>
 </nav>

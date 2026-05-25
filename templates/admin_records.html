@@ -36,6 +36,17 @@
         <span>점수/결과</span>
         <input type="text" name="score" placeholder="92 또는 완료" required>
       </label>
+      <label>
+        <span>비고 (선택)</span>
+        <select name="flag">
+          <option value="">— 없음 —</option>
+          <option value="재시">⚠️ 재시</option>
+          <option value="숙제미비">📕 숙제미비</option>
+          <option value="추가과제">📝 추가과제</option>
+          <option value="결석">🚫 결석</option>
+          <option value="우수">🌟 우수</option>
+        </select>
+      </label>
     </div>
     <label>
       <span>피드백</span>
@@ -101,10 +112,11 @@
       <thead>
         <tr>
           <th style="width:36px"></th>
-          <th style="width:110px">날짜</th>
-          <th style="width:120px">학생</th>
-          <th style="width:110px">항목</th>
-          <th style="width:80px">점수</th>
+          <th style="width:100px">날짜</th>
+          <th style="width:110px">학생</th>
+          <th style="width:100px">항목</th>
+          <th style="width:70px">점수</th>
+          <th style="width:110px">비고</th>
           <th>피드백</th>
           <th style="width:60px">작업</th>
         </tr>
@@ -119,6 +131,13 @@
           <td>{{ students.get(r.student_code, {}).get('name', '?') }}<br><code class="muted small">{{ r.student_code }}</code></td>
           <td>{{ r.category }}</td>
           <td class="score">{{ r.score }}</td>
+          <td>
+            {% if r.flag %}
+              <span class="flag-badge flag-{{ r.flag }} {% if r.resolved %}flag-resolved{% endif %}">
+                {{ r.flag }}{% if r.resolved %} ✓{% endif %}
+              </span>
+            {% endif %}
+          </td>
           <td class="feedback">{{ r.feedback }}</td>
           <td>
             <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini">수정</a>

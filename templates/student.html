@@ -3,12 +3,39 @@
 {% block content %}
 <header class="page-header">
   <div>
-    <h1>{{ student.name }} <span class="muted">학생</span></h1>
+    <h1>
+      {{ student.name }} <span class="muted">학생</span>
+      {% if my_flags %}
+      <span class="header-flag-summary">
+        {% for r in my_flags[:3] %}
+        <span class="flag-badge flag-{{ r.flag }} flag-mini">
+          {{ r.date[5:] }} {{ r.flag }}
+        </span>
+        {% endfor %}
+        {% if my_flags|length > 3 %}<span class="muted small">+{{ my_flags|length - 3 }}건</span>{% endif %}
+      </span>
+      {% endif %}
+    </h1>
     <p class="favorite-tag">❤️ 신쌤의 애제자 <b>"{{ student.name }}"</b></p>
     <p class="muted small">마지막 업데이트: {{ last_update }}</p>
   </div>
   <a href="{{ url_for('logout') }}" class="btn-ghost">로그아웃</a>
 </header>
+
+{% if my_flags %}
+<section class="card flag-alert-card">
+  <h2>⚠️ 알림 사항 ({{ my_flags|length }}건)</h2>
+  <p class="muted small">처리가 필요한 항목입니다. 완료되면 자동으로 사라집니다.</p>
+  {% for r in my_flags %}
+  <div class="flag-item">
+    <span class="flag-date">📅 {{ r.date }}</span>
+    <span class="flag-category">{{ r.category }}</span>
+    <span class="flag-badge flag-{{ r.flag }}">{{ r.flag }}</span>
+    {% if r.feedback %}<span class="flag-feedback">— {{ r.feedback }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 
 <section class="card homework-card">
   <h2>📚 이번주 숙제</h2>
@@ -88,6 +115,7 @@
           <th style="width:140px">항목</th>
           <th style="width:90px">점수/결과</th>
           <th style="width:110px">반 등수</th>
+          <th style="width:110px">비고</th>
           <th>피드백</th>
         </tr>
       </thead>
@@ -105,6 +133,13 @@
               </span>
             {% else %}
               <span class="muted small">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.flag %}
+              <span class="flag-badge flag-{{ r.flag }} {% if r.resolved %}flag-resolved{% endif %}">
+                {{ r.flag }}{% if r.resolved %} ✓{% endif %}
+              </span>
             {% endif %}
           </td>
           <td class="feedback">{{ r.feedback }}</td>
@@ -164,6 +199,7 @@
           <th style="width:120px">날짜</th>
           <th style="width:90px">점수/결과</th>
           <th style="width:110px">반 등수</th>
+          <th style="width:110px">비고</th>
           <th>피드백</th>
         </tr>
       </thead>
@@ -181,6 +217,13 @@
               </span>
             {% else %}
               <span class="muted small">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.flag %}
+              <span class="flag-badge flag-{{ r.flag }} {% if r.resolved %}flag-resolved{% endif %}">
+                {{ r.flag }}{% if r.resolved %} ✓{% endif %}
+              </span>
             {% endif %}
           </td>
           <td class="feedback">{{ r.feedback }}</td>

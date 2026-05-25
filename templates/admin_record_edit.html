@@ -34,7 +34,25 @@
         <span>점수/결과</span>
         <input type="text" name="score" value="{{ record.score }}" required>
       </label>
+      <label>
+        <span>비고 (재시/숙제미비 등)</span>
+        <select name="flag">
+          <option value="" {% if not record.flag %}selected{% endif %}>— 없음 —</option>
+          <option value="재시" {% if record.flag == '재시' %}selected{% endif %}>⚠️ 재시</option>
+          <option value="숙제미비" {% if record.flag == '숙제미비' %}selected{% endif %}>📕 숙제미비</option>
+          <option value="추가과제" {% if record.flag == '추가과제' %}selected{% endif %}>📝 추가과제</option>
+          <option value="결석" {% if record.flag == '결석' %}selected{% endif %}>🚫 결석</option>
+          <option value="우수" {% if record.flag == '우수' %}selected{% endif %}>🌟 우수</option>
+          {% if record.flag and record.flag not in ['재시', '숙제미비', '추가과제', '결석', '우수'] %}
+          <option value="{{ record.flag }}" selected>📌 {{ record.flag }} (사용자 정의)</option>
+          {% endif %}
+        </select>
+      </label>
     </div>
+    <label class="checkbox-label">
+      <input type="checkbox" name="resolved" {% if record.resolved %}checked{% endif %}>
+      <span>✅ 처리 완료 (재시 마침 / 숙제 제출 등) — 체크하면 학부모 페이지 알림에서 사라집니다</span>
+    </label>
     <label>
       <span>피드백</span>
       <textarea name="feedback" rows="4">{{ record.feedback }}</textarea>

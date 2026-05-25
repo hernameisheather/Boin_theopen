@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}특이사항 관리{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <div>
+    <h1>⚠️ 특이사항 관리</h1>
+    <p class="muted small">재시 / 숙제미비 / 추가과제 등 미처리 항목 모음</p>
+  </div>
+</header>
+
+{% if total_active == 0 %}
+<section class="card empty">
+  <p>🎉 현재 미처리 특이사항이 없습니다.</p>
+</section>
+{% else %}
+
+{% if flag_counts %}
+<section class="stats-grid">
+  {% for flag, count in flag_counts.items() %}
+  <div class="stat-card">
+    <div class="stat-cat">{{ flag }}</div>
+    <div class="stat-avg">{{ count }}<span class="stat-unit">건</span></div>
+    <div class="stat-meta">미처리</div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% for date, items in active_by_date %}
+<section class="card">
+  <h2>📌 {{ date }} <span class="muted small">({{ items|length }}건)</span></h2>
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:120px">학생</th>
+        <th style="width:110px">항목</th>
+        <th style="width:80px">점수</th>
+        <th style="width:110px">비고</th>
+        <th>피드백</th>
+        <th style="width:180px">작업</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for idx, r in items %}
+      <tr>
+        <td>
+          <b>{{ students.get(r.student_code, {}).get('name', '?') }}</b>
+          <br><code class="muted small">{{ r.student_code }}</code>
+        </td>
+        <td>{{ r.category }}</td>
+        <td class="score">{{ r.score }}</td>
+        <td><span class="flag-badge flag-{{ r.flag }}">{{ r.flag }}</span></td>
+        <td class="feedback">{{ r.feedback }}</td>
+        <td>
+          <form method="post" style="display:inline;" onsubmit="return confirm('이 항목을 완료 처리하시겠습니까?');">
+            <input type="hidden" name="action" value="resolve">
+            <input type="hidden" name="idx" value="{{ idx }}">
+            <button type="submit" class="btn-mini btn-mini-success">✓ 완료</button>
+          </form>
+          <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini">수정</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+{% endif %}
+
+{% if resolved_recs %}
+<section class="card">
+  <h2>📜 최근 처리 완료 <span class="muted small">(최근 {{ resolved_recs|length }}건)</span></h2>
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:110px">날짜</th>
+        <th style="width:120px">학생</th>
+        <th style="width:110px">항목</th>
+        <th style="width:110px">비고</th>
+        <th>피드백</th>
+        <th style="width:140px">작업</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for idx, r in resolved_recs %}
+      <tr>
+        <td>{{ r.date }}</td>
+        <td>{{ students.get(r.student_code, {}).get('name', '?') }}</td>
+        <td>{{ r.category }}</td>
+        <td><span class="flag-badge flag-resolved">{{ r.flag }} ✓</span></td>
+        <td class="feedback">{{ r.feedback }}</td>
+        <td>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="unresolve">
+            <input type="hidden" name="idx" value="{{ idx }}">
+            <button type="submit" class="btn-mini">↩ 되돌리기</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

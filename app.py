@@ -81,25 +81,47 @@ def _parse_workbook(wb):
             header = [str(c).strip() if c is not None else "" for c in rows[0]]
             has_name_col = len(header) >= 3 and header[2] in ("학생이름", "이름", "name", "Name")
 
+            # 비고(플래그)와 완료(처리됨) 컬럼 위치 자동 탐지 — 어디에 있어도 OK
+            flag_idx = None
+            resolved_idx = None
+            for i, h in enumerate(header):
+                if h in ("비고", "특이사항", "플래그", "flag", "메모"):
+                    flag_idx = i
+                if h in ("완료", "해결", "처리", "처리됨", "resolved", "done"):
+                    resolved_idx = i
+
+            def _parse_resolved(v):
+                if v is None:
+                    return False
+                s = str(v).strip().lower()
+                return s in ("o", "완료", "true", "1", "y", "예", "✓", "v", "처리")
+
             for row in rows[1:]:
                 if not row or row[0] is None or (len(row) > 1 and row[1] is None):
                     continue
                 if has_name_col:
-                    records.append({
+                    rec = {
                         "date": _parse_date(row[0]),
                         "student_code": str(row[1]).strip(),
                         "category": str(row[3]).strip() if len(row) > 3 and row[3] else "",
                         "score": str(row[4]).strip() if len(row) > 4 and row[4] is not None else "",
                         "feedback": str(row[5]).strip() if len(row) > 5 and row[5] else "",
-                    })
+                    }
                 else:
-                    records.append({
+                    rec = {
                         "date": _parse_date(row[0]),
                         "student_code": str(row[1]).strip(),
                         "category": str(row[2]).strip() if len(row) > 2 and row[2] else "",
                         "score": str(row[3]).strip() if len(row) > 3 and row[3] is not None else "",
                         "feedback": str(row[4]).strip() if len(row) > 4 and row[4] else "",
-                    })
+                    }
+                rec["flag"] = (str(row[flag_idx]).strip()
+                               if flag_idx is not None and len(row) > flag_idx and row[flag_idx]
+                               else "")
+                rec["resolved"] = (_parse_resolved(row[resolved_idx])
+                                   if resolved_idx is not None and len(row) > resolved_idx
+                                   else False)
+                records.append(rec)
 
     homework = ""
     messages = []
@@ -175,7 +197,7 @@ def save_data(students=None, records=None, homework=None, messages=None):
         ws1.append([code, s.get("name", ""), s.get("pin", ""), s.get("parent", "")])
 
     ws2 = wb.create_sheet("기록")
-    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백"])
+    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료"])
     for r in records:
         code = r.get("student_code", "")
         name = students.get(code, {}).get("name", "")
@@ -186,6 +208,8 @@ def save_data(students=None, records=None, homework=None, messages=None):
             r.get("category", ""),
             r.get("score", ""),
             r.get("feedback", ""),
+            r.get("flag", ""),
+            "O" if r.get("resolved") else "",
         ])
 
     ws3 = wb.create_sheet("공지사항")
@@ -199,7 +223,7 @@ def save_data(students=None, records=None, homework=None, messages=None):
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
-        (ws2, [12, 10, 12, 14, 8, 50]),
+        (ws2, [12, 10, 12, 14, 8, 40, 12, 8]),
         (ws3, [14, 14, 12, 60]),
     ]:
         for i, w in enumerate(widths, 1):
@@ -417,6 +441,10 @@ def my_page():
         by_date_dict[r["date"]].append(r)
     by_date = sorted(by_date_dict.items(), key=lambda x: x[0], reverse=True)
 
+    # 미처리 특이사항 (재시/숙제미비/추가과제 등)
+    my_flags = [r for r in items if r.get("flag") and not r.get("resolved")]
+    my_flags.sort(key=lambda r: r["date"], reverse=True)
+
     return render_template(
         "student.html",
         student=student,
@@ -429,6 +457,7 @@ def my_page():
         messages=my_messages,
         by_date=by_date,
         ranks=ranks,
+        my_flags=my_flags,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 
@@ -595,6 +624,8 @@ def admin_records():
         category = request.form.get("category", "").strip()
         score = request.form.get("score", "").strip()
         feedback = request.form.get("feedback", "").strip()
+        flag = request.form.get("flag", "").strip()
+        resolved = request.form.get("resolved") == "on"
 
         if not date:
             flash("날짜를 입력해주세요.", "error")
@@ -609,6 +640,8 @@ def admin_records():
                 "category": category or "기타",
                 "score": score,
                 "feedback": feedback,
+                "flag": flag,
+                "resolved": resolved,
             })
             save_data(data["students"], data["records"])
             flash(f"{data['students'][student_code]['name']} 학생의 기록이 추가되었습니다.", "success")
@@ -662,6 +695,8 @@ def admin_record_edit(idx):
                 "category": request.form.get("category", "").strip() or "기타",
                 "score": request.form.get("score", "").strip(),
                 "feedback": request.form.get("feedback", "").strip(),
+                "flag": request.form.get("flag", "").strip(),
+                "resolved": request.form.get("resolved") == "on",
             }
             save_data(data["students"], data["records"])
             flash("기록이 수정되었습니다.", "success")
@@ -750,6 +785,64 @@ def admin_student_edit(code):
     )
 
 
+# ─── 라우트: 관리자 — 특이사항 (재시/숙제미비/추가과제) ────
+@app.route("/admin/flags", methods=["GET", "POST"])
+@admin_required
+def admin_flags():
+    data = load_data()
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        try:
+            idx = int(request.form.get("idx", -1))
+        except (ValueError, TypeError):
+            idx = -1
+
+        if 0 <= idx < len(data["records"]):
+            if action == "resolve":
+                data["records"][idx]["resolved"] = True
+                save_data(data["students"], data["records"])
+                flash("완료 처리되었습니다.", "success")
+            elif action == "unresolve":
+                data["records"][idx]["resolved"] = False
+                save_data(data["students"], data["records"])
+                flash("미처리로 되돌렸습니다.", "success")
+            elif action == "clear_flag":
+                data["records"][idx]["flag"] = ""
+                data["records"][idx]["resolved"] = False
+                save_data(data["students"], data["records"])
+                flash("비고가 제거되었습니다.", "success")
+        return redirect(url_for("admin_flags"))
+
+    # 미처리 특이사항: flag 있고 resolved 아닌 것
+    active = [(i, r) for i, r in enumerate(data["records"])
+              if r.get("flag") and not r.get("resolved")]
+    active_by_date = defaultdict(list)
+    for i, r in active:
+        active_by_date[r["date"]].append((i, r))
+    active_list = sorted(active_by_date.items(), key=lambda x: x[0], reverse=True)
+
+    # 처리 완료 이력 (최근 30건)
+    resolved_recs = [(i, r) for i, r in enumerate(data["records"])
+                     if r.get("flag") and r.get("resolved")]
+    resolved_recs.sort(key=lambda x: x[1]["date"], reverse=True)
+    resolved_recs = resolved_recs[:30]
+
+    # 플래그 종류별 카운트
+    flag_counts = defaultdict(int)
+    for _, r in active:
+        flag_counts[r["flag"]] += 1
+
+    return render_template(
+        "admin_flags.html",
+        active_by_date=active_list,
+        resolved_recs=resolved_recs,
+        students=data["students"],
+        total_active=len(active),
+        flag_counts=dict(flag_counts),
+    )
+
+
 # ─── 라우트: 관리자 — 공지사항(이번주 숙제 + 한마디) ────────
 @app.route("/admin/announcements", methods=["GET", "POST"])
 @admin_required
@@ -830,12 +923,14 @@ def download_template():
     ws1.append(["S002", "이도윤", "5678", "이도윤 어머니"])
 
     ws2 = wb.create_sheet("기록")
-    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백"])
+    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료"])
     ws2.append(["2026-05-18", "S001", "김민지", "Daily Test", "92",
-                "어휘 문제에서 실수가 있었지만 독해는 완벽했습니다."])
-    ws2.append(["2026-05-18", "S001", "김민지", "숙제", "완료", "꼼꼼하게 잘 했습니다."])
-    ws2.append(["2026-05-18", "S002", "이도윤", "Daily Test", "85",
-                "문법 파트에서 2개 틀렸습니다. 복습 권장."])
+                "어휘 문제에서 실수가 있었지만 독해는 완벽했습니다.", "", ""])
+    ws2.append(["2026-05-18", "S001", "김민지", "숙제", "완료", "꼼꼼하게 잘 했습니다.", "", ""])
+    ws2.append(["2026-05-18", "S002", "이도윤", "단어시험", "60",
+                "기준 미달, 재시 필요.", "재시", ""])
+    ws2.append(["2026-05-17", "S002", "이도윤", "숙제", "미제출",
+                "다음 시간 꼭 챙겨오세요.", "숙제미비", "O"])
 
     ws3 = wb.create_sheet("공지사항")
     ws3.append(["종류", "대상학생코드", "학생이름", "내용"])
@@ -845,7 +940,7 @@ def download_template():
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
-        (ws2, [12, 10, 12, 14, 8, 50]),
+        (ws2, [12, 10, 12, 14, 8, 40, 12, 8]),
         (ws3, [14, 14, 12, 60]),
     ]:
         for i, w in enumerate(widths, 1):
