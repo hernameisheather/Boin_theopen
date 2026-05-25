@@ -589,6 +589,20 @@ pre {
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
+.bulk-toolbar-bottom {
+  margin-top: 12px;
+  margin-bottom: 0;
+  justify-content: space-between;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(249,250,251,0.95) 0%, rgba(249,250,251,1) 100%);
+  backdrop-filter: blur(4px);
+  border-color: var(--primary);
+}
+.bulk-spacer { flex: 1; }
+.save-btn { background: #4f46e5; }
+.save-btn:hover { background: #4338ca; }
+
 .bulk-check-label {
   display: flex;
   align-items: center;
@@ -624,6 +638,59 @@ pre {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ─── 인라인 편집 ─────────────────────────────────────── */
+.inline-hint {
+  margin: 4px 0 12px;
+  padding: 8px 12px;
+  background: #eef2ff;
+  border-left: 3px solid var(--primary);
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.inline-edit-table td {
+  padding: 6px 4px;
+  vertical-align: middle;
+}
+.inline-edit {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fafbff;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: var(--text);
+}
+.inline-edit:focus {
+  background: white;
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+.inline-edit:hover { background: #fff; }
+.inline-score {
+  text-align: center;
+  font-weight: 600;
+  color: var(--primary);
+}
+.inline-flag {
+  cursor: pointer;
+  background: white;
+}
+.inline-flag.flag-select-재시 { background: #fee2e2; color: #991b1b; }
+.inline-flag.flag-select-숙제미비 { background: #fed7aa; color: #7c2d12; }
+.inline-flag.flag-select-추가과제 { background: #e0e7ff; color: #3730a3; }
+.inline-flag.flag-select-결석 { background: #e5e7eb; color: #374151; }
+.inline-flag.flag-select-우수 { background: #fef9c3; color: #713f12; }
+.inline-feedback { font-size: 0.88rem; }
+.resolved-cell { text-align: center; }
+.resolved-cell input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #10b981;
 }
 
 /* ─── 미니 버튼 (테이블 내 작업) ────────────────────────── */

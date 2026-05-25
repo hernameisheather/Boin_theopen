@@ -633,7 +633,6 @@ def admin_records():
             # 선택된 인덱스들을 받아서 일괄 삭제
             raw_indices = request.form.getlist("selected")
             try:
-                # 중복 제거 + 내림차순 정렬 (뒤에서부터 삭제해서 인덱스 안 꼬이게)
                 indices = sorted({int(i) for i in raw_indices}, reverse=True)
             except (ValueError, TypeError):
                 indices = []
@@ -648,6 +647,36 @@ def admin_records():
                         removed += 1
                 save_data(data["students"], data["records"])
                 flash(f"{removed}건의 기록이 일괄 삭제되었습니다.", "success")
+            return redirect(url_for("admin_records",
+                                    student=request.args.get("student", ""),
+                                    category=request.args.get("category", "")))
+
+        if action == "bulk_save":
+            # 인라인 편집된 점수/피드백/비고/완료를 일괄 저장
+            changed = 0
+            for i in range(len(data["records"])):
+                # 폼에 present_{i}=1 마커가 없으면 (필터로 가려진 행) 건너뜀
+                if request.form.get(f"present_{i}") != "1":
+                    continue
+                r = data["records"][i]
+                new_score = request.form.get(f"score_{i}", "").strip()
+                new_feedback = request.form.get(f"feedback_{i}", "").strip()
+                new_flag = request.form.get(f"flag_{i}", "").strip()
+                new_resolved = request.form.get(f"resolved_{i}") == "on"
+                if (new_score != r.get("score", "") or
+                    new_feedback != r.get("feedback", "") or
+                    new_flag != r.get("flag", "") or
+                    new_resolved != bool(r.get("resolved"))):
+                    r["score"] = new_score
+                    r["feedback"] = new_feedback
+                    r["flag"] = new_flag
+                    r["resolved"] = new_resolved
+                    changed += 1
+            if changed > 0:
+                save_data(data["students"], data["records"])
+                flash(f"{changed}건의 기록이 일괄 수정되었습니다.", "success")
+            else:
+                flash("변경된 내용이 없습니다.", "success")
             return redirect(url_for("admin_records",
                                     student=request.args.get("student", ""),
                                     category=request.args.get("category", "")))

@@ -93,32 +93,40 @@
 <section class="card">
   <h2>📊 기록 목록</h2>
 
-  <form method="post" id="bulk-form" onsubmit="return confirmBulkDelete();">
-    <input type="hidden" name="action" value="bulk_delete">
-
+  <form method="post" id="bulk-form">
     <div class="bulk-toolbar">
       <label class="bulk-check-label">
         <input type="checkbox" id="select-all">
         <span>전체 선택</span>
       </label>
       <span class="muted small">선택: <b id="selected-count">0</b>건</span>
-      <button type="submit" class="btn-danger btn-sm" id="bulk-delete-btn" disabled>
+      <button type="submit" name="action" value="bulk_delete" class="btn-danger btn-sm"
+              id="bulk-delete-btn" disabled onclick="return confirmBulkDelete();">
         🗑️ 선택 항목 삭제
       </button>
-      <span class="muted small bulk-hint">💡 체크박스로 여러 개 선택 → 일괄 삭제</span>
+      <span class="bulk-spacer"></span>
+      <button type="submit" name="action" value="bulk_save" class="btn-primary btn-sm save-btn">
+        💾 변경사항 저장
+      </button>
     </div>
 
-    <table class="records">
+    <p class="inline-hint muted small">
+      💡 점수/피드백은 칸에 바로 입력, 비고는 드롭다운에서 선택, 완료는 체크박스로 표시 후 우측 상단 <b>💾 변경사항 저장</b> 클릭.
+      날짜·학생·항목 변경이 필요한 경우 행 오른쪽 <b>⋯</b> 버튼으로 상세 편집.
+    </p>
+
+    <table class="records inline-edit-table">
       <thead>
         <tr>
-          <th style="width:36px"></th>
+          <th style="width:30px"></th>
           <th style="width:100px">날짜</th>
-          <th style="width:110px">학생</th>
-          <th style="width:100px">항목</th>
-          <th style="width:70px">점수</th>
-          <th style="width:110px">비고</th>
+          <th style="width:100px">학생</th>
+          <th style="width:90px">항목</th>
+          <th style="width:80px">점수</th>
+          <th style="width:130px">비고</th>
+          <th style="width:50px">완료</th>
           <th>피드백</th>
-          <th style="width:60px">작업</th>
+          <th style="width:40px">상세</th>
         </tr>
       </thead>
       <tbody>
@@ -126,26 +134,47 @@
         <tr>
           <td class="check-cell">
             <input type="checkbox" class="row-check" name="selected" value="{{ idx }}">
+            <input type="hidden" name="present_{{ idx }}" value="1">
           </td>
           <td>{{ r.date }}</td>
           <td>{{ students.get(r.student_code, {}).get('name', '?') }}<br><code class="muted small">{{ r.student_code }}</code></td>
           <td>{{ r.category }}</td>
-          <td class="score">{{ r.score }}</td>
           <td>
-            {% if r.flag %}
-              <span class="flag-badge flag-{{ r.flag }} {% if r.resolved %}flag-resolved{% endif %}">
-                {{ r.flag }}{% if r.resolved %} ✓{% endif %}
-              </span>
-            {% endif %}
+            <input type="text" class="inline-edit inline-score" name="score_{{ idx }}" value="{{ r.score }}">
           </td>
-          <td class="feedback">{{ r.feedback }}</td>
           <td>
-            <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini">수정</a>
+            <select class="inline-edit inline-flag flag-select-{{ r.flag }}" name="flag_{{ idx }}">
+              <option value="" {% if not r.flag %}selected{% endif %}>— 없음 —</option>
+              <option value="재시" {% if r.flag == '재시' %}selected{% endif %}>⚠️ 재시</option>
+              <option value="숙제미비" {% if r.flag == '숙제미비' %}selected{% endif %}>📕 숙제미비</option>
+              <option value="추가과제" {% if r.flag == '추가과제' %}selected{% endif %}>📝 추가과제</option>
+              <option value="결석" {% if r.flag == '결석' %}selected{% endif %}>🚫 결석</option>
+              <option value="우수" {% if r.flag == '우수' %}selected{% endif %}>🌟 우수</option>
+              {% if r.flag and r.flag not in ['재시', '숙제미비', '추가과제', '결석', '우수'] %}
+              <option value="{{ r.flag }}" selected>📌 {{ r.flag }}</option>
+              {% endif %}
+            </select>
+          </td>
+          <td class="resolved-cell">
+            <input type="checkbox" name="resolved_{{ idx }}" {% if r.resolved %}checked{% endif %} title="처리 완료">
+          </td>
+          <td>
+            <input type="text" class="inline-edit inline-feedback" name="feedback_{{ idx }}" value="{{ r.feedback }}">
+          </td>
+          <td>
+            <a href="{{ url_for('admin_record_edit', idx=idx) }}" class="btn-mini" title="날짜/학생/항목 변경 등 상세 편집">⋯</a>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+
+    <div class="bulk-toolbar bulk-toolbar-bottom">
+      <span class="muted small">총 {{ records|length }}건 표시 중</span>
+      <button type="submit" name="action" value="bulk_save" class="btn-primary save-btn">
+        💾 모든 변경사항 저장
+      </button>
+    </div>
   </form>
 </section>
 
