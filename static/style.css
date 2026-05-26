@@ -401,11 +401,14 @@ pre {
   color: #78350f;
 }
 .contact-info {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  color: #78350f;
+}
+.contact-info:first-of-type {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px dashed #fcd34d;
-  font-size: 0.95rem;
-  color: #78350f;
 }
 .contact-info a {
   color: #b45309;
