@@ -5,23 +5,82 @@
 
 <header class="page-header">
   <h1>📢 공지사항 관리</h1>
-  <p class="muted small">이번주 숙제 + 신쌤의 한마디 (전체/개별)</p>
+  <p class="muted small">이번주 숙제 + 신쌤의 한마디 — 게시/내림 토글로 학부모 노출 제어</p>
 </header>
 
+<!-- ─── 이번주 숙제 ─────────────────────────────────────── -->
 <section class="card">
-  <h2>📚 이번주 숙제 <span class="muted small">(모든 학생/학부모에게 표시)</span></h2>
+  <h2>📚 새 숙제 게시</h2>
   <form method="post" class="form">
-    <input type="hidden" name="action" value="update_homework">
-    <textarea name="homework" rows="3" placeholder="예: 워크북 32-45쪽 풀고, 단어 50개 외워오기">{{ homework }}</textarea>
-    <div class="form-actions">
-      <button type="submit" class="btn-primary">저장</button>
-      <span class="muted small">비워두고 저장하면 숙제 표시가 사라집니다.</span>
-    </div>
+    <input type="hidden" name="action" value="add_homework">
+    <textarea name="homework" rows="3" placeholder="예: 워크북 32-45쪽 풀고, 단어 50개 외워오기" required></textarea>
+    <button type="submit" class="btn-primary">📤 게시</button>
   </form>
 </section>
 
+{% if hws_published %}
 <section class="card">
-  <h2>💬 신쌤의 한마디 추가</h2>
+  <h2>📋 현재 게시 중인 숙제 ({{ hws_published|length }}건)</h2>
+  {% for idx, h in hws_published %}
+  <div class="announce-item announce-published">
+    <span class="announce-status published">📤 게시 중</span>
+    <p class="announce-content">{{ h.content }}</p>
+    <div class="announce-actions">
+      <form method="post" style="display:inline">
+        <input type="hidden" name="action" value="unpublish_homework">
+        <input type="hidden" name="idx" value="{{ idx }}">
+        <button type="submit" class="btn-mini">🔽 내리기 (보관)</button>
+      </form>
+      <form method="post" style="display:inline"
+            onsubmit="return confirm('이 숙제를 영구 삭제하시겠습니까?\n(보관도 안 됩니다)');">
+        <input type="hidden" name="action" value="delete_homework">
+        <input type="hidden" name="idx" value="{{ idx }}">
+        <button type="submit" class="btn-mini btn-mini-danger">🗑️ 삭제</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% else %}
+<section class="card empty">
+  <p>현재 게시 중인 숙제가 없습니다. 위에서 새로 게시하세요.</p>
+</section>
+{% endif %}
+
+{% if hws_archived %}
+<section class="card">
+  <h2>
+    <button type="button" class="collapse-toggle" onclick="toggleSection('hw-archive')">
+      <span id="hw-archive-arrow">▶</span> 📜 보관된 (내린) 숙제 ({{ hws_archived|length }}건)
+    </button>
+  </h2>
+  <div id="hw-archive" style="display:none;">
+    {% for idx, h in hws_archived %}
+    <div class="announce-item announce-archived">
+      <span class="announce-status archived">📦 보관</span>
+      <p class="announce-content">{{ h.content }}</p>
+      <div class="announce-actions">
+        <form method="post" style="display:inline">
+          <input type="hidden" name="action" value="publish_homework">
+          <input type="hidden" name="idx" value="{{ idx }}">
+          <button type="submit" class="btn-mini btn-mini-success">📤 다시 게시</button>
+        </form>
+        <form method="post" style="display:inline"
+              onsubmit="return confirm('이 숙제를 영구 삭제하시겠습니까?');">
+          <input type="hidden" name="action" value="delete_homework">
+          <input type="hidden" name="idx" value="{{ idx }}">
+          <button type="submit" class="btn-mini btn-mini-danger">🗑️ 삭제</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ─── 신쌤의 한마디 ───────────────────────────────────── -->
+<section class="card">
+  <h2>💬 새 한마디 게시</h2>
   <form method="post" class="form">
     <input type="hidden" name="action" value="add_message">
     <div class="form-row">
@@ -39,23 +98,23 @@
       <span>내용</span>
       <textarea name="content" rows="3" placeholder="학생에게 전달할 격려/안내/축하 메시지" required></textarea>
     </label>
-    <button type="submit" class="btn-primary">한마디 추가</button>
+    <button type="submit" class="btn-primary">📤 게시</button>
   </form>
 </section>
 
-{% if messages %}
+{% if msgs_published %}
 <section class="card">
-  <h2>📋 등록된 한마디 ({{ messages|length }}건)</h2>
+  <h2>📋 현재 게시 중인 한마디 ({{ msgs_published|length }}건)</h2>
   <table class="records">
     <thead>
       <tr>
-        <th style="width:140px">대상</th>
+        <th style="width:130px">대상</th>
         <th>내용</th>
-        <th style="width:80px">작업</th>
+        <th style="width:180px">작업</th>
       </tr>
     </thead>
     <tbody>
-      {% for m in messages %}
+      {% for idx, m in msgs_published %}
       <tr>
         <td>
           {% if m.student_code %}
@@ -67,10 +126,16 @@
         </td>
         <td class="feedback">{{ m.content }}</td>
         <td>
-          <form method="post" style="display:inline;" onsubmit="return confirm('이 한마디를 삭제하시겠습니까?');">
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="unpublish_message">
+            <input type="hidden" name="idx" value="{{ idx }}">
+            <button type="submit" class="btn-mini">🔽 내리기</button>
+          </form>
+          <form method="post" style="display:inline;"
+                onsubmit="return confirm('이 한마디를 영구 삭제하시겠습니까?');">
             <input type="hidden" name="action" value="delete_message">
-            <input type="hidden" name="idx" value="{{ loop.index0 }}">
-            <button type="submit" class="btn-mini btn-mini-danger">삭제</button>
+            <input type="hidden" name="idx" value="{{ idx }}">
+            <button type="submit" class="btn-mini btn-mini-danger">🗑️</button>
           </form>
         </td>
       </tr>
@@ -78,9 +143,68 @@
     </tbody>
   </table>
 </section>
-{% else %}
-<section class="card empty">
-  <p>아직 등록된 한마디가 없습니다. 위에서 추가하세요.</p>
+{% endif %}
+
+{% if msgs_archived %}
+<section class="card">
+  <h2>
+    <button type="button" class="collapse-toggle" onclick="toggleSection('msg-archive')">
+      <span id="msg-archive-arrow">▶</span> 📜 보관된 (내린) 한마디 ({{ msgs_archived|length }}건)
+    </button>
+  </h2>
+  <div id="msg-archive" style="display:none;">
+    <table class="records">
+      <thead>
+        <tr>
+          <th style="width:130px">대상</th>
+          <th>내용</th>
+          <th style="width:180px">작업</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for idx, m in msgs_archived %}
+        <tr>
+          <td>
+            {% if m.student_code %}
+              {{ students.get(m.student_code, {}).get('name', '?') }}
+              <br><code class="muted small">{{ m.student_code }}</code>
+            {% else %}
+              <span class="tag-broadcast">📣 전체</span>
+            {% endif %}
+          </td>
+          <td class="feedback muted">{{ m.content }}</td>
+          <td>
+            <form method="post" style="display:inline;">
+              <input type="hidden" name="action" value="publish_message">
+              <input type="hidden" name="idx" value="{{ idx }}">
+              <button type="submit" class="btn-mini btn-mini-success">📤 다시 게시</button>
+            </form>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('이 한마디를 영구 삭제하시겠습니까?');">
+              <input type="hidden" name="action" value="delete_message">
+              <input type="hidden" name="idx" value="{{ idx }}">
+              <button type="submit" class="btn-mini btn-mini-danger">🗑️</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endif %}
+
+<script>
+  function toggleSection(id) {
+    var el = document.getElementById(id);
+    var arrow = document.getElementById(id + '-arrow');
+    if (el.style.display === 'none') {
+      el.style.display = 'block';
+      arrow.textContent = '▼';
+    } else {
+      el.style.display = 'none';
+      arrow.textContent = '▶';
+    }
+  }
+</script>
 {% endblock %}

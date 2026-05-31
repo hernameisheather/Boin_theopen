@@ -41,8 +41,8 @@ _data_cache = {
     "mtime": 0,
     "students": {},
     "records": [],
-    "homework": "",       # 이번주 숙제 (전체 공통, 단일 값)
-    "messages": [],       # 신쌤의 한마디: [{"student_code": "", "content": "..."}]
+    "homeworks": [],      # 이번주 숙제 목록: [{"content": "...", "published": True/False}]
+    "messages": [],       # 신쌤의 한마디: [{"student_code": "...", "content": "...", "published": True/False}]
 }
 
 
@@ -124,17 +124,30 @@ def _parse_workbook(wb):
                                    else False)
                 records.append(rec)
 
-    homework = ""
+    homeworks = []
     messages = []
     if "공지사항" in wb.sheetnames:
         ws = wb["공지사항"]
         rows = list(ws.iter_rows(values_only=True))
         if rows:
             header = [str(c).strip() if c is not None else "" for c in rows[0]]
-            # 신형식: 종류 | 대상학생코드 | 학생이름 | 내용
-            # 구형식: 종류 | 대상학생코드 | 내용
             has_name_col = len(header) >= 3 and header[2] in ("학생이름", "이름", "name", "Name")
             content_idx = 3 if has_name_col else 2
+
+            # 상태(게시/내림) 컬럼 자동 탐지
+            status_idx = None
+            for i, h in enumerate(header):
+                if h in ("상태", "게시", "공개", "status", "published"):
+                    status_idx = i
+
+            def _is_published(v):
+                if v is None:
+                    return True  # 기본값은 게시
+                s = str(v).strip().lower()
+                if not s:
+                    return True
+                # 내림/비공개로 처리할 값들
+                return s not in ("내림", "비공개", "off", "no", "n", "0", "false", "unpublished", "비활성", "x")
 
             for row in rows[1:]:
                 if not row or row[0] is None:
@@ -144,18 +157,22 @@ def _parse_workbook(wb):
                 content = str(row[content_idx]).strip() if len(row) > content_idx and row[content_idx] else ""
                 if not content:
                     continue
-                if kind in ("이번주숙제", "이번주 숙제", "숙제", "homework"):
-                    homework = content
-                elif kind in ("한마디", "신쌤의한마디", "신쌤의 한마디", "메시지", "message"):
-                    messages.append({"student_code": code, "content": content})
+                published = True
+                if status_idx is not None and len(row) > status_idx:
+                    published = _is_published(row[status_idx])
 
-    return students, records, homework, messages
+                if kind in ("이번주숙제", "이번주 숙제", "숙제", "homework"):
+                    homeworks.append({"content": content, "published": published})
+                elif kind in ("한마디", "신쌤의한마디", "신쌤의 한마디", "메시지", "message"):
+                    messages.append({"student_code": code, "content": content, "published": published})
+
+    return students, records, homeworks, messages
 
 
 def load_data():
     """Excel을 읽어서 메모리에 캐싱. 파일 수정시각이 바뀌면 재로딩."""
     if not os.path.exists(EXCEL_PATH):
-        _data_cache.update({"mtime": 0, "students": {}, "records": [], "homework": "", "messages": []})
+        _data_cache.update({"mtime": 0, "students": {}, "records": [], "homeworks": [], "messages": []})
         return _data_cache
 
     mtime = os.path.getmtime(EXCEL_PATH)
@@ -163,13 +180,13 @@ def load_data():
         return _data_cache
 
     wb = load_workbook(EXCEL_PATH, data_only=True)
-    students, records, homework, messages = _parse_workbook(wb)
+    students, records, homeworks, messages = _parse_workbook(wb)
 
     _data_cache.update({
         "mtime": mtime,
         "students": students,
         "records": records,
-        "homework": homework,
+        "homeworks": homeworks,
         "messages": messages,
     })
     return _data_cache
@@ -206,18 +223,32 @@ def _add_records_dropdowns(ws):
     dv_done.add("H2:H2000")
 
 
-def save_data(students=None, records=None, homework=None, messages=None):
+def _add_announcements_dropdown(ws):
+    """`공지사항` 시트의 상태(E열)에 게시/내림 드롭다운."""
+    dv = DataValidation(
+        type="list",
+        formula1='"게시,내림"',
+        allow_blank=True,
+        showErrorMessage=True,
+    )
+    dv.error = "게시 또는 내림 중에서 선택하세요."
+    dv.errorTitle = "잘못된 상태"
+    ws.add_data_validation(dv)
+    dv.add("E2:E1000")
+
+
+def save_data(students=None, records=None, homeworks=None, messages=None):
     """현재 메모리 상태를 Excel 파일로 저장.
     None을 전달하면 현재 캐시 값을 그대로 유지 (덮어쓰기 안 함).
     """
-    if students is None or records is None or homework is None or messages is None:
+    if students is None or records is None or homeworks is None or messages is None:
         current = load_data()
         if students is None:
             students = current["students"]
         if records is None:
             records = current["records"]
-        if homework is None:
-            homework = current["homework"]
+        if homeworks is None:
+            homeworks = current["homeworks"]
         if messages is None:
             messages = current["messages"]
 
@@ -245,23 +276,36 @@ def save_data(students=None, records=None, homework=None, messages=None):
         ])
 
     ws3 = wb.create_sheet("공지사항")
-    ws3.append(["종류", "대상학생코드", "학생이름", "내용"])
-    if homework:
-        ws3.append(["이번주숙제", "", "", homework])
+    ws3.append(["종류", "대상학생코드", "학생이름", "내용", "상태"])
+    for h in homeworks:
+        ws3.append([
+            "이번주숙제",
+            "",
+            "",
+            h.get("content", ""),
+            "게시" if h.get("published") else "내림",
+        ])
     for m in messages:
         code = m.get("student_code", "")
         name = students.get(code, {}).get("name", "") if code else ""
-        ws3.append(["한마디", code, name, m.get("content", "")])
+        ws3.append([
+            "한마디",
+            code,
+            name,
+            m.get("content", ""),
+            "게시" if m.get("published") else "내림",
+        ])
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
         (ws2, [12, 10, 12, 14, 8, 40, 12, 8]),
-        (ws3, [14, 14, 12, 60]),
+        (ws3, [14, 14, 12, 50, 10]),
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
     _add_records_dropdowns(ws2)
+    _add_announcements_dropdown(ws3)
 
     wb.save(EXCEL_PATH)
     _data_cache["mtime"] = 0  # 캐시 무효화
@@ -437,11 +481,16 @@ def my_page():
         if len(pts) >= 2:
             charts[cat] = _build_chart(pts)
 
-    # 이 학생에게 보여줄 한마디: 공통(빈 코드) + 본인 개별
+    # 이 학생에게 보여줄 한마디: 게시 중 + (공통 OR 본인 개별)
     my_messages = [
         m for m in data["messages"]
-        if not m.get("student_code") or m.get("student_code") == code
+        if m.get("published", True)
+        and (not m.get("student_code") or m.get("student_code") == code)
     ]
+
+    # 게시 중인 숙제만 (가장 최근 게시본 사용)
+    published_homeworks = [h["content"] for h in data["homeworks"] if h.get("published", True)]
+    homework = "\n\n".join(published_homeworks) if published_homeworks else ""
 
     # 반 등수 계산: 항목명 기준 (날짜 무관, 모든 반 통합)
     # 같은 학생이 같은 항목에 여러 점수가 있으면 최고점 기준으로 순위 산정
@@ -487,7 +536,7 @@ def my_page():
         stats=stats,
         class_avg=class_avg,
         charts=charts,
-        homework=data["homework"],
+        homework=homework,
         messages=my_messages,
         by_date=by_date,
         ranks=ranks,
@@ -526,7 +575,7 @@ def admin():
                 flash("Excel(.xlsx) 파일만 업로드 가능합니다.", "error")
             else:
                 try:
-                    new_students, new_records, new_homework, new_messages = _parse_uploaded_excel(f)
+                    new_students, new_records, new_homeworks, new_messages = _parse_uploaded_excel(f)
                 except Exception as e:
                     flash(f"엑셀 파일을 읽을 수 없습니다: {e}", "error")
                     return redirect(url_for("admin"))
@@ -545,7 +594,7 @@ def admin():
                         else:
                             skipped_students += 1
 
-                    # 기록 중복 판별: (날짜, 학생코드, 항목, 점수, 피드백) 5개 모두 일치
+                    # 기록 중복 판별
                     def _rec_key(r):
                         return (r.get("date", ""), r.get("student_code", ""),
                                 r.get("category", ""), r.get("score", ""),
@@ -562,11 +611,19 @@ def admin():
                             unique_records.append(r)
                     merged_records = current["records"] + unique_records
 
-                    # 이번주 숙제: 업로드 파일에 있으면 교체
-                    homework_changed = bool(new_homework) and new_homework != current["homework"]
-                    final_homework = new_homework if new_homework else current["homework"]
+                    # 숙제 중복 판별: content 동일
+                    seen_hws = {h.get("content", "") for h in current["homeworks"]}
+                    unique_hws = []
+                    skipped_hws = 0
+                    for h in new_homeworks:
+                        if h.get("content", "") in seen_hws:
+                            skipped_hws += 1
+                        else:
+                            seen_hws.add(h.get("content", ""))
+                            unique_hws.append(h)
+                    merged_homeworks = current["homeworks"] + unique_hws
 
-                    # 한마디 중복 판별: (학생코드, 내용) 모두 일치
+                    # 한마디 중복 판별: (학생코드, 내용) 일치
                     def _msg_key(m):
                         return (m.get("student_code", ""), m.get("content", ""))
                     seen_msgs = {_msg_key(m) for m in current["messages"]}
@@ -581,25 +638,23 @@ def admin():
                             unique_msgs.append(m)
                     merged_messages = current["messages"] + unique_msgs
 
-                    save_data(merged_students, merged_records, final_homework, merged_messages)
+                    save_data(merged_students, merged_records, merged_homeworks, merged_messages)
 
-                    # 결과 메시지 조립
                     parts = []
                     parts.append(f"신규 학생 {added_students}명" +
                                  (f" (중복 {skipped_students}명 건너뜀)" if skipped_students else ""))
                     parts.append(f"새 기록 {len(unique_records)}건" +
                                  (f" (중복 {skipped_records}건 건너뜀)" if skipped_records else ""))
-                    if homework_changed:
-                        parts.append("이번주 숙제 갱신")
+                    parts.append(f"새 숙제 {len(unique_hws)}건" +
+                                 (f" (중복 {skipped_hws}건 건너뜀)" if skipped_hws else ""))
                     parts.append(f"새 한마디 {len(unique_msgs)}건" +
                                  (f" (중복 {skipped_msgs}건 건너뜀)" if skipped_msgs else ""))
                     flash("추가 완료: " + " · ".join(parts), "success")
                 else:
-                    # 덮어쓰기: 전체 교체
-                    save_data(new_students, new_records, new_homework, new_messages)
+                    save_data(new_students, new_records, new_homeworks, new_messages)
                     flash(
                         f"덮어쓰기 완료: 학생 {len(new_students)}명, 기록 {len(new_records)}건, "
-                        f"한마디 {len(new_messages)}건으로 전체 교체됨.",
+                        f"숙제 {len(new_homeworks)}건, 한마디 {len(new_messages)}건으로 전체 교체됨.",
                         "success"
                     )
         return redirect(url_for("admin"))
@@ -990,14 +1045,37 @@ def admin_announcements():
     if request.method == "POST":
         action = request.form.get("action", "")
 
-        if action == "update_homework":
-            new_homework = request.form.get("homework", "").strip()
-            save_data(homework=new_homework)
-            if new_homework:
-                flash("이번주 숙제가 업데이트되었습니다.", "success")
+        # ─── 이번주 숙제 ────────────────────────────────
+        if action == "add_homework":
+            content = request.form.get("homework", "").strip()
+            if not content:
+                flash("숙제 내용을 입력해주세요.", "error")
             else:
-                flash("이번주 숙제가 삭제되었습니다.", "success")
+                new_hws = list(data["homeworks"]) + [{"content": content, "published": True}]
+                save_data(homeworks=new_hws)
+                flash("새 숙제가 게시되었습니다.", "success")
 
+        elif action in ("publish_homework", "unpublish_homework", "delete_homework"):
+            try:
+                idx = int(request.form.get("idx", -1))
+            except ValueError:
+                idx = -1
+            if 0 <= idx < len(data["homeworks"]):
+                new_hws = list(data["homeworks"])
+                if action == "delete_homework":
+                    del new_hws[idx]
+                    flash("숙제가 삭제되었습니다.", "success")
+                elif action == "publish_homework":
+                    new_hws[idx] = dict(new_hws[idx], published=True)
+                    flash("숙제가 다시 게시되었습니다.", "success")
+                else:
+                    new_hws[idx] = dict(new_hws[idx], published=False)
+                    flash("숙제를 내렸습니다 (보관됨).", "success")
+                save_data(homeworks=new_hws)
+            else:
+                flash("대상 숙제를 찾을 수 없습니다.", "error")
+
+        # ─── 한마디 ─────────────────────────────────────
         elif action == "add_message":
             content = request.form.get("content", "").strip()
             student_code = request.form.get("student_code", "").strip()
@@ -1006,30 +1084,52 @@ def admin_announcements():
             elif student_code and student_code not in data["students"]:
                 flash("선택한 학생코드가 존재하지 않습니다.", "error")
             else:
-                new_messages = data["messages"] + [{"student_code": student_code, "content": content}]
+                new_messages = list(data["messages"]) + [{
+                    "student_code": student_code,
+                    "content": content,
+                    "published": True,
+                }]
                 save_data(messages=new_messages)
                 target = data["students"][student_code]["name"] if student_code else "전체"
-                flash(f"한마디가 추가되었습니다. (대상: {target})", "success")
+                flash(f"한마디가 게시되었습니다. (대상: {target})", "success")
 
-        elif action == "delete_message":
+        elif action in ("publish_message", "unpublish_message", "delete_message"):
             try:
                 idx = int(request.form.get("idx", -1))
             except ValueError:
                 idx = -1
             if 0 <= idx < len(data["messages"]):
                 new_messages = list(data["messages"])
-                del new_messages[idx]
+                if action == "delete_message":
+                    del new_messages[idx]
+                    flash("한마디가 삭제되었습니다.", "success")
+                elif action == "publish_message":
+                    new_messages[idx] = dict(new_messages[idx], published=True)
+                    flash("한마디가 다시 게시되었습니다.", "success")
+                else:
+                    new_messages[idx] = dict(new_messages[idx], published=False)
+                    flash("한마디를 내렸습니다 (보관됨).", "success")
                 save_data(messages=new_messages)
-                flash("한마디가 삭제되었습니다.", "success")
             else:
-                flash("삭제할 한마디를 찾을 수 없습니다.", "error")
+                flash("대상 한마디를 찾을 수 없습니다.", "error")
 
         return redirect(url_for("admin_announcements"))
 
+    # 분리 (인덱스 유지 위해 enumerate)
+    hws_indexed = list(enumerate(data["homeworks"]))
+    hws_published = [(i, h) for i, h in hws_indexed if h.get("published")]
+    hws_archived = [(i, h) for i, h in hws_indexed if not h.get("published")]
+
+    msgs_indexed = list(enumerate(data["messages"]))
+    msgs_published = [(i, m) for i, m in msgs_indexed if m.get("published")]
+    msgs_archived = [(i, m) for i, m in msgs_indexed if not m.get("published")]
+
     return render_template(
         "admin_announcements.html",
-        homework=data["homework"],
-        messages=data["messages"],
+        hws_published=hws_published,
+        hws_archived=hws_archived,
+        msgs_published=msgs_published,
+        msgs_archived=msgs_archived,
         students=data["students"],
     )
 
@@ -1046,7 +1146,7 @@ def admin_download():
         return redirect(url_for("admin"))
     # 신형식 보장을 위해 재저장
     data = load_data()
-    save_data(data["students"], data["records"], data["homework"], data["messages"])
+    save_data(data["students"], data["records"], data["homeworks"], data["messages"])
     return send_file(
         EXCEL_PATH,
         as_attachment=True,
@@ -1076,20 +1176,22 @@ def download_template():
                 "다음 시간 꼭 챙겨오세요.", "숙제미비", "O"])
 
     ws3 = wb.create_sheet("공지사항")
-    ws3.append(["종류", "대상학생코드", "학생이름", "내용"])
-    ws3.append(["이번주숙제", "", "", "워크북 32-45쪽 풀고, 단어 50개 외워오기"])
-    ws3.append(["한마디", "", "", "시험 기간 화이팅! 모두 잘 할 수 있을거예요."])
-    ws3.append(["한마디", "S001", "김민지", "단어시험 1등 축하해요. 다음주도 기대할게요!"])
+    ws3.append(["종류", "대상학생코드", "학생이름", "내용", "상태"])
+    ws3.append(["이번주숙제", "", "", "워크북 32-45쪽 풀고, 단어 50개 외워오기", "게시"])
+    ws3.append(["이번주숙제", "", "", "지난주 숙제: 모의고사 1회 풀어오기", "내림"])
+    ws3.append(["한마디", "", "", "시험 기간 화이팅! 모두 잘 할 수 있을거예요.", "게시"])
+    ws3.append(["한마디", "S001", "김민지", "단어시험 1등 축하해요. 다음주도 기대할게요!", "게시"])
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
         (ws2, [12, 10, 12, 14, 8, 40, 12, 8]),
-        (ws3, [14, 14, 12, 60]),
+        (ws3, [14, 14, 12, 50, 10]),
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
     _add_records_dropdowns(ws2)
+    _add_announcements_dropdown(ws3)
 
     buf = io.BytesIO()
     wb.save(buf)
