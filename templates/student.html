@@ -5,6 +5,10 @@
   <div>
     <h1>
       {{ student.name }} <span class="muted">학생</span>
+      <a href="https://drive.google.com/drive/folders/10dCr8giSNQRCVF9depn-KYWMz2XTCoaQ?usp=sharing"
+         target="_blank" rel="noopener noreferrer" class="drive-link" title="신쌤 필기자료 공유 폴더 열기">
+        📂 신쌤 필기자료
+      </a>
       {% if my_flags %}
       <span class="header-flag-summary">
         {% for r in my_flags[:3] %}
@@ -46,11 +50,6 @@
   {% endif %}
   <div class="contact-info">
     📞 <b>신쌤 번호</b>: <a href="tel:01059390080">010-5939-0080</a>
-  </div>
-  <div class="contact-info">
-    📂 <b>신쌤 필기자료 공유 폴더</b>:
-    <a href="https://drive.google.com/drive/folders/10dCr8giSNQRCVF9depn-KYWMz2XTCoaQ?usp=sharing"
-       target="_blank" rel="noopener noreferrer">바로가기 →</a>
   </div>
 </section>
 

@@ -386,6 +386,31 @@ pre {
   border-radius: 6px;
 }
 
+/* ─── 신쌤 필기자료 폴더 버튼 (학생 이름 옆) ───────────── */
+.drive-link {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
+  color: #1e3a8a;
+  border: 1px solid #60a5fa;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+  vertical-align: middle;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
+  transition: all 0.15s ease;
+}
+.drive-link:hover {
+  background: linear-gradient(135deg, #bfdbfe 0%, #60a5fa 100%);
+  color: #1e3a8a;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+
 /* ─── 신쌤의 애제자 태그 ───────────────────────────────── */
 .favorite-tag {
   margin: 4px 0 2px;
