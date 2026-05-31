@@ -848,6 +848,81 @@ def admin_student_edit(code):
     )
 
 
+# ─── 라우트: 관리자 — 시험 등수 모아보기 ──────────────────
+@app.route("/admin/rankings")
+@admin_required
+def admin_rankings():
+    data = load_data()
+
+    # 항목별로 학생별 점수 모으기 (숫자 점수만)
+    cat_scores = defaultdict(lambda: defaultdict(list))  # cat -> {code -> [scores]}
+    for r in data["records"]:
+        sc = _parse_score(r["score"])
+        if sc is None:
+            continue
+        cat = r["category"] or "기타"
+        cat_scores[cat][r["student_code"]].append(sc)
+
+    # 항목별 등수 계산 (경쟁식: 1, 2, 2, 4)
+    rankings = {}
+    for cat, code_scores in cat_scores.items():
+        entries = []
+        for code, scores in code_scores.items():
+            entries.append({
+                "code": code,
+                "name": data["students"].get(code, {}).get("name", "?"),
+                "best": max(scores),
+                "avg": round(sum(scores) / len(scores), 1),
+                "count": len(scores),
+            })
+        # 최고점 기준 내림차순
+        entries.sort(key=lambda e: (-e["best"], -e["avg"], e["name"]))
+        prev_best = None
+        current_rank = 0
+        for i, e in enumerate(entries):
+            if e["best"] != prev_best:
+                current_rank = i + 1
+                prev_best = e["best"]
+            e["rank"] = current_rank
+        rankings[cat] = entries
+
+    # 항목명 알파벳 정렬 (한국어 가나다)
+    sorted_cats = sorted(rankings.keys())
+
+    # 종합 점수 (참여한 모든 항목의 평균을 평균낸 값) — 학생별 종합 순위
+    overall = []
+    student_avgs = defaultdict(list)  # code -> [cat_avg, ...]
+    for cat, entries in rankings.items():
+        for e in entries:
+            student_avgs[e["code"]].append(e["avg"])
+
+    for code, avgs in student_avgs.items():
+        if not avgs:
+            continue
+        overall.append({
+            "code": code,
+            "name": data["students"].get(code, {}).get("name", "?"),
+            "overall_avg": round(sum(avgs) / len(avgs), 1),
+            "category_count": len(avgs),
+        })
+    overall.sort(key=lambda x: (-x["overall_avg"], x["name"]))
+    prev_avg = None
+    current_rank = 0
+    for i, e in enumerate(overall):
+        if e["overall_avg"] != prev_avg:
+            current_rank = i + 1
+            prev_avg = e["overall_avg"]
+        e["rank"] = current_rank
+
+    return render_template(
+        "admin_rankings.html",
+        rankings=rankings,
+        categories=sorted_cats,
+        overall=overall,
+        total_students=len(data["students"]),
+    )
+
+
 # ─── 라우트: 관리자 — 특이사항 (재시/숙제미비/추가과제) ────
 @app.route("/admin/flags", methods=["GET", "POST"])
 @admin_required

@@ -320,6 +320,18 @@ pre {
   margin-bottom: 6px;
 }
 
+/* ─── 종합 순위 카드 (관리자 등수 페이지) ─────────────── */
+.rank-overall-card {
+  background: linear-gradient(135deg, #fef9c3 0%, #fde047 30%, #fef9c3 100%);
+  border: 1px solid #facc15;
+}
+.rank-overall-card h2 { color: #713f12; }
+.rank-overall-card .records {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 /* ─── 등수 뱃지 ────────────────────────────────────────── */
 .rank-badge {
   display: inline-block;

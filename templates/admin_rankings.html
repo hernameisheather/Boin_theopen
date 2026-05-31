@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}시험 등수 모아보기{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <div>
+    <h1>🏆 시험 등수 모아보기</h1>
+    <p class="muted small">항목별 학생 등수 한눈에 (최고점 기준, 동점자는 같은 등수)</p>
+  </div>
+</header>
+
+{% if not rankings %}
+<section class="card empty">
+  <p>아직 숫자 점수가 등록된 시험이 없습니다.</p>
+  <p class="muted small">텍스트 점수(완료/미완료 등)는 등수 산정에서 제외됩니다.</p>
+</section>
+{% else %}
+
+{% if overall %}
+<section class="card rank-overall-card">
+  <h2>🌟 종합 순위 <span class="muted small">(전체 항목 평균의 평균)</span></h2>
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:80px">등수</th>
+        <th style="width:160px">학생</th>
+        <th style="width:120px">종합 평균</th>
+        <th>참여 항목 수</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in overall %}
+      <tr>
+        <td>
+          <span class="rank-badge {% if e.rank == 1 %}rank-gold{% elif e.rank == 2 %}rank-silver{% elif e.rank == 3 %}rank-bronze{% endif %}">
+            {{ e.rank }}등
+          </span>
+        </td>
+        <td>
+          <b>{{ e.name }}</b>
+          <br><code class="muted small">{{ e.code }}</code>
+        </td>
+        <td class="score"><b>{{ e.overall_avg }}</b>점</td>
+        <td class="muted">{{ e.category_count }}개 항목</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% for cat in categories %}
+{% set entries = rankings[cat] %}
+<section class="card">
+  <h2>📊 {{ cat }} <span class="muted small">— 응시 {{ entries|length }}명</span></h2>
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:80px">등수</th>
+        <th style="width:160px">학생</th>
+        <th style="width:90px">최고점</th>
+        <th style="width:90px">평균</th>
+        <th style="width:90px">응시 횟수</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in entries %}
+      <tr>
+        <td>
+          <span class="rank-badge {% if s.rank == 1 %}rank-gold{% elif s.rank == 2 %}rank-silver{% elif s.rank == 3 %}rank-bronze{% endif %}">
+            {{ s.rank }}등
+          </span>
+        </td>
+        <td>
+          <b>{{ s.name }}</b>
+          <br><code class="muted small">{{ s.code }}</code>
+        </td>
+        <td class="score"><b>{{ s.best }}</b></td>
+        <td>{{ s.avg }}</td>
+        <td class="muted">{{ s.count }}회</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+{% endif %}
+{% endblock %}
