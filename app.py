@@ -944,29 +944,43 @@ def admin_rankings():
     # 항목명 알파벳 정렬 (한국어 가나다)
     sorted_cats = sorted(rankings.keys())
 
-    # 종합 점수 (참여한 모든 항목의 평균을 평균낸 값) — 학생별 종합 순위
-    overall = []
-    student_avgs = defaultdict(list)  # code -> [cat_avg, ...]
+    # 종합 순위: 메달 개수 기준 (시험마다 만점 다르므로 평균 의미 없음)
+    # 금=1등, 은=2등, 동=3등
+    medal_counts = defaultdict(lambda: {"gold": 0, "silver": 0, "bronze": 0, "categories": 0})
     for cat, entries in rankings.items():
         for e in entries:
-            student_avgs[e["code"]].append(e["avg"])
+            code = e["code"]
+            medal_counts[code]["categories"] += 1
+            if e["rank"] == 1:
+                medal_counts[code]["gold"] += 1
+            elif e["rank"] == 2:
+                medal_counts[code]["silver"] += 1
+            elif e["rank"] == 3:
+                medal_counts[code]["bronze"] += 1
 
-    for code, avgs in student_avgs.items():
-        if not avgs:
-            continue
+    overall = []
+    for code, counts in medal_counts.items():
         overall.append({
             "code": code,
             "name": data["students"].get(code, {}).get("name", "?"),
-            "overall_avg": round(sum(avgs) / len(avgs), 1),
-            "category_count": len(avgs),
+            "gold": counts["gold"],
+            "silver": counts["silver"],
+            "bronze": counts["bronze"],
+            "total_medals": counts["gold"] + counts["silver"] + counts["bronze"],
+            "category_count": counts["categories"],
         })
-    overall.sort(key=lambda x: (-x["overall_avg"], x["name"]))
-    prev_avg = None
+
+    # 정렬: 금 많은 순 → 은 많은 순 → 동 많은 순 → 이름
+    overall.sort(key=lambda x: (-x["gold"], -x["silver"], -x["bronze"], x["name"]))
+
+    # 경쟁식 등수 (금·은·동 개수 모두 같으면 같은 등수)
+    prev_key = None
     current_rank = 0
     for i, e in enumerate(overall):
-        if e["overall_avg"] != prev_avg:
+        key = (e["gold"], e["silver"], e["bronze"])
+        if key != prev_key:
             current_rank = i + 1
-            prev_avg = e["overall_avg"]
+            prev_key = key
         e["rank"] = current_rank
 
     return render_template(

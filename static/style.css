@@ -331,6 +331,28 @@ pre {
   border-radius: 8px;
   overflow: hidden;
 }
+.medal-count {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+.medal-count.medal-gold {
+  color: #b45309;
+  background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+}
+.medal-count.medal-silver {
+  color: #4b5563;
+  background: linear-gradient(135deg, #f3f4f6 0%, #d1d5db 100%);
+}
+.medal-count.medal-bronze {
+  color: #92400e;
+  background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+}
+.medal-total {
+  text-align: center;
+  font-size: 0.95rem;
+}
 
 /* ─── 등수 뱃지 ────────────────────────────────────────── */
 .rank-badge {

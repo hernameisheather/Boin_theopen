@@ -19,14 +19,18 @@
 
 {% if overall %}
 <section class="card rank-overall-card">
-  <h2>🌟 종합 순위 <span class="muted small">(전체 항목 평균의 평균)</span></h2>
+  <h2>🌟 종합 순위 <span class="muted small">— 메달(1·2·3등) 획득 횟수 기준</span></h2>
+  <p class="muted small" style="margin:0 0 10px;">금 ▶ 은 ▶ 동 순으로 비교. 같으면 동률.</p>
   <table class="records">
     <thead>
       <tr>
         <th style="width:80px">등수</th>
         <th style="width:160px">학생</th>
-        <th style="width:120px">종합 평균</th>
-        <th>참여 항목 수</th>
+        <th style="width:80px">🥇 금</th>
+        <th style="width:80px">🥈 은</th>
+        <th style="width:80px">🥉 동</th>
+        <th style="width:90px">총 메달</th>
+        <th>참여 항목</th>
       </tr>
     </thead>
     <tbody>
@@ -41,8 +45,11 @@
           <b>{{ e.name }}</b>
           <br><code class="muted small">{{ e.code }}</code>
         </td>
-        <td class="score"><b>{{ e.overall_avg }}</b>점</td>
-        <td class="muted">{{ e.category_count }}개 항목</td>
+        <td class="medal-count {% if e.gold %}medal-gold{% endif %}">{{ e.gold }}</td>
+        <td class="medal-count {% if e.silver %}medal-silver{% endif %}">{{ e.silver }}</td>
+        <td class="medal-count {% if e.bronze %}medal-bronze{% endif %}">{{ e.bronze }}</td>
+        <td class="medal-total"><b>{{ e.total_medals }}</b>개</td>
+        <td class="muted">{{ e.category_count }}개</td>
       </tr>
       {% endfor %}
     </tbody>
