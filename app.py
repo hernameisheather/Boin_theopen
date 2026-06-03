@@ -5,7 +5,8 @@
 """
 import os
 import io
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from collections import defaultdict
 from functools import wraps
 
@@ -340,6 +341,160 @@ def records_for(student_code):
     for r in items:
         grouped[r["category"] or "기타"].append(r)
     return items, dict(grouped)
+
+
+# ─── 클리닉 자동 기록 (매주 화/목) ────────────────────────────
+CLINIC_CATEGORY = "주간 클리닉"
+CLINIC_BASE_FEEDBACK = "주간 혼공학습지 풀이 및 서술형 피드백 완료."
+CLINIC_TIPS = [
+    "[학습 포인트] 지문 속 복잡한 구문 — 주절과 종속절을 먼저 분리해서 분석하는 연습 필요.",
+    "[학습 포인트] 직역이 안되는 영어 표현 — 문맥 속 의역으로 접근하는 훈련 강조.",
+    "[학습 포인트] 3줄 도식화를 통한 전체 주제 파악 — 도입/전개/결론 구조 의식.",
+    "[학습 포인트] 주제 배열 영작 서술형 — 한국어 해석이 없는 주제 영작 시 핵심 키워드 먼저 정리.",
+    "[학습 포인트] 요약문 영작 — 원문의 군더더기를 빼고 핵심 메시지만 간결하게 표현.",
+    "[학습 포인트] 지문 속 추상명사 — 구체적 예시로 의미를 풀어 이해하는 습관.",
+    "[학습 포인트] 관계대명사절 — 선행사부터 다시 짚어가며 정확히 해석.",
+    "[학습 포인트] 도치·강조 구문 — 평서문으로 재배열 후 의미 확인.",
+]
+CLINIC_STUDENTS_BY_WEEKDAY = {
+    1: ["정주원", "유한선"],            # 화요일 클리닉
+    3: ["박서원", "장우영", "오우진"],   # 목요일 클리닉
+}
+_BOOTSTRAP_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v1.json")
+
+
+def _find_or_create_clinic_student(name, students):
+    """이름으로 학생을 찾고, 없으면 CLI### 코드로 신규 생성."""
+    for code, s in students.items():
+        if s.get("name") == name:
+            return code
+    nums = []
+    for c in students:
+        if c.startswith("CLI"):
+            try:
+                nums.append(int(c[3:]))
+            except ValueError:
+                pass
+    new_code = f"CLI{(max(nums) + 1 if nums else 1):03d}"
+    students[new_code] = {"name": name, "pin": "1234", "parent": ""}
+    return new_code
+
+
+def add_clinic_records(clinic_date_str, student_names, extras_by_name=None):
+    """클리닉 기록을 추가. (날짜+학생코드+카테고리) 중복은 건너뜀.
+    반환: (추가된 학생명 리스트, 건너뛴 학생명 리스트)
+    """
+    extras_by_name = extras_by_name or {}
+    data = load_data()
+    students = dict(data["students"])
+    records = list(data["records"])
+    existing_keys = {
+        (r.get("date"), r.get("student_code"), r.get("category"))
+        for r in records
+    }
+
+    added_names = []
+    skipped_names = []
+    for name in student_names:
+        code = _find_or_create_clinic_student(name, students)
+        if (clinic_date_str, code, CLINIC_CATEGORY) in existing_keys:
+            skipped_names.append(name)
+            continue
+        tip = random.choice(CLINIC_TIPS)
+        feedback = f"{CLINIC_BASE_FEEDBACK} {tip}"
+        if name in extras_by_name and extras_by_name[name]:
+            feedback += f"\n[추가] {extras_by_name[name].strip()}"
+        records.append({
+            "date": clinic_date_str,
+            "student_code": code,
+            "category": CLINIC_CATEGORY,
+            "score": "완료",
+            "feedback": feedback,
+            "flag": "",
+            "resolved": False,
+        })
+        added_names.append(name)
+
+    if added_names:
+        save_data(students, records)
+    return added_names, skipped_names
+
+
+def _this_week_weekday_date(weekday_num):
+    """이번주 (월~일 기준) weekday(0=Mon, 1=Tue, 3=Thu)의 날짜 문자열 반환."""
+    today = datetime.now()
+    diff = weekday_num - today.weekday()
+    target = today + timedelta(days=diff)
+    return target.strftime("%Y-%m-%d")
+
+
+def _last_weekday_date(weekday_num):
+    """오늘 또는 가장 가까운 과거 weekday의 날짜 문자열 반환."""
+    today = datetime.now()
+    diff = (today.weekday() - weekday_num) % 7
+    target = today - timedelta(days=diff)
+    return target.strftime("%Y-%m-%d")
+
+
+def scheduled_tuesday_clinic():
+    date_str = _last_weekday_date(1)
+    add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[1])
+
+
+def scheduled_thursday_clinic():
+    date_str = _last_weekday_date(3)
+    add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[3])
+
+
+_scheduler_started = False
+
+def start_clinic_scheduler():
+    """APScheduler를 한 번만 시작."""
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        sched = BackgroundScheduler(timezone="Asia/Seoul")
+        sched.add_job(scheduled_tuesday_clinic,
+                      CronTrigger(day_of_week="tue", hour=21, minute=0),
+                      id="tue_clinic", replace_existing=True)
+        sched.add_job(scheduled_thursday_clinic,
+                      CronTrigger(day_of_week="thu", hour=21, minute=0),
+                      id="thu_clinic", replace_existing=True)
+        sched.start()
+        _scheduler_started = True
+    except Exception as e:
+        # 스케줄러 실패해도 앱은 계속 동작
+        print(f"[WARN] Scheduler start failed: {e}")
+
+
+def run_one_time_bootstrap():
+    """첫 배포 시 이번주 화요일 클리닉 기록 자동 추가 (유한선: 어법성판단 추가).
+    한 번만 실행되도록 마커 파일로 관리.
+    """
+    import json
+    if os.path.exists(_BOOTSTRAP_MARKER):
+        return
+    try:
+        tue_date = _this_week_weekday_date(1)  # 이번주 화요일
+        extras = {"유한선": "어법성판단 문제 오답 풀이 추가 진행."}
+        added, _ = add_clinic_records(tue_date, CLINIC_STUDENTS_BY_WEEKDAY[1], extras)
+        os.makedirs(os.path.dirname(_BOOTSTRAP_MARKER), exist_ok=True)
+        with open(_BOOTSTRAP_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "tue_date": tue_date,
+                "added_students": added,
+            }, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[WARN] Bootstrap failed: {e}")
+
+
+# 모듈 import 시점에 부트스트랩 + 스케줄러 가동
+run_one_time_bootstrap()
+start_clinic_scheduler()
 
 
 # ─── 인증 ────────────────────────────────────────────────────
@@ -900,6 +1055,57 @@ def admin_student_edit(code):
         "admin_student_edit.html",
         student=data["students"][code],
         code=code,
+    )
+
+
+# ─── 라우트: 관리자 — 클리닉 관리 ────────────────────────
+@app.route("/admin/clinic", methods=["GET", "POST"])
+@admin_required
+def admin_clinic():
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        weekday = 1 if action == "run_tuesday" else 3 if action == "run_thursday" else None
+        if weekday is None:
+            flash("올바르지 않은 요청입니다.", "error")
+            return redirect(url_for("admin_clinic"))
+
+        # 날짜: 이번주 해당 요일
+        date_str = _this_week_weekday_date(weekday)
+
+        # 학생별 추가 메모 수집
+        names = CLINIC_STUDENTS_BY_WEEKDAY[weekday]
+        extras = {}
+        for n in names:
+            note = request.form.get(f"extra_{n}", "").strip()
+            if note:
+                extras[n] = note
+
+        added, skipped = add_clinic_records(date_str, names, extras)
+        msg_parts = [f"{date_str} 클리닉 기록"]
+        if added:
+            msg_parts.append(f"추가: {', '.join(added)} ({len(added)}명)")
+        if skipped:
+            msg_parts.append(f"건너뜀(중복): {', '.join(skipped)} ({len(skipped)}명)")
+        flash(" · ".join(msg_parts), "success")
+        return redirect(url_for("admin_clinic"))
+
+    # 최근 클리닉 기록 확인
+    data = load_data()
+    recent_clinic = sorted(
+        [r for r in data["records"] if r.get("category") == CLINIC_CATEGORY],
+        key=lambda r: r.get("date", ""),
+        reverse=True,
+    )[:20]
+
+    return render_template(
+        "admin_clinic.html",
+        tue_students=CLINIC_STUDENTS_BY_WEEKDAY[1],
+        thu_students=CLINIC_STUDENTS_BY_WEEKDAY[3],
+        this_tue=_this_week_weekday_date(1),
+        this_thu=_this_week_weekday_date(3),
+        recent=recent_clinic,
+        students=data["students"],
+        scheduler_active=_scheduler_started,
     )
 
 

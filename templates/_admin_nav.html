@@ -5,6 +5,7 @@
   <a href="{{ url_for('admin_rankings') }}" class="{% if request.endpoint == 'admin_rankings' %}active{% endif %}">🏆 시험 등수</a>
   <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">📢 공지사항</a>
   <a href="{{ url_for('admin_flags') }}" class="{% if request.endpoint == 'admin_flags' %}active{% endif %}">⚠️ 특이사항</a>
+  <a href="{{ url_for('admin_clinic') }}" class="{% if request.endpoint == 'admin_clinic' %}active{% endif %}">🩺 클리닉</a>
   <a href="{{ url_for('admin_download') }}">💾 Excel 다운로드</a>
   <a href="{{ url_for('admin_logout') }}" class="logout">로그아웃</a>
 </nav>

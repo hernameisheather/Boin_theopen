@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}클리닉 자동기록 관리{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <div>
+    <h1>🩺 클리닉 자동기록 관리</h1>
+    <p class="muted small">매주 화/목 클리닉 기록을 자동으로 추가합니다.</p>
+  </div>
+</header>
+
+<section class="card">
+  <h2>⚙️ 자동 스케줄러 상태</h2>
+  <p>
+    {% if scheduler_active %}
+      <span class="status-on">🟢 작동 중</span> —
+      매주 <b>화요일 21:00</b> · <b>목요일 21:00</b> (한국시간) 에 자동 실행됩니다.
+    {% else %}
+      <span class="status-off">🔴 비활성</span> — 스케줄러 시작 실패. 서버 재시작 필요.
+    {% endif %}
+  </p>
+  <p class="muted small">스케줄러는 자동으로 같은 날짜·학생의 중복 기록을 건너뜁니다.</p>
+</section>
+
+<!-- 화요일 클리닉 -->
+<section class="card">
+  <h2>📅 화요일 클리닉 ({{ this_tue }})</h2>
+  <p class="muted">대상 학생: <b>{{ tue_students | join(', ') }}</b></p>
+
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="run_tuesday">
+    <p class="muted small">학생별 추가 메모(선택) — 기본 학습 포인트 외에 이번 회차 특이사항을 적어주세요.</p>
+    {% for n in tue_students %}
+    <label>
+      <span>{{ n }} 추가 메모</span>
+      <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
+    </label>
+    {% endfor %}
+    <button type="submit" class="btn-primary">📝 이번주 화요일 클리닉 기록 추가</button>
+  </form>
+</section>
+
+<!-- 목요일 클리닉 -->
+<section class="card">
+  <h2>📅 목요일 클리닉 ({{ this_thu }})</h2>
+  <p class="muted">대상 학생: <b>{{ thu_students | join(', ') }}</b></p>
+
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="run_thursday">
+    <p class="muted small">학생별 추가 메모(선택)</p>
+    {% for n in thu_students %}
+    <label>
+      <span>{{ n }} 추가 메모</span>
+      <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
+    </label>
+    {% endfor %}
+    <button type="submit" class="btn-primary">📝 이번주 목요일 클리닉 기록 추가</button>
+  </form>
+</section>
+
+<!-- 최근 기록 -->
+<section class="card">
+  <h2>📋 최근 클리닉 기록 (최대 20건)</h2>
+  {% if not recent %}
+  <p class="muted">아직 추가된 클리닉 기록이 없습니다.</p>
+  {% else %}
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:100px">날짜</th>
+        <th style="width:120px">학생</th>
+        <th>피드백</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recent %}
+      <tr>
+        <td>{{ r.date }}</td>
+        <td>{{ students.get(r.student_code, {}).get('name', '?') }}
+            <br><code class="muted small">{{ r.student_code }}</code></td>
+        <td class="feedback">{{ r.feedback }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}
