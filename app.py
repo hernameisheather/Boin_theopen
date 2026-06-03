@@ -458,10 +458,10 @@ def start_clinic_scheduler():
         from apscheduler.triggers.cron import CronTrigger
         sched = BackgroundScheduler(timezone="Asia/Seoul")
         sched.add_job(scheduled_tuesday_clinic,
-                      CronTrigger(day_of_week="tue", hour=21, minute=0),
+                      CronTrigger(day_of_week="tue", hour=23, minute=30),
                       id="tue_clinic", replace_existing=True)
         sched.add_job(scheduled_thursday_clinic,
-                      CronTrigger(day_of_week="thu", hour=21, minute=0),
+                      CronTrigger(day_of_week="thu", hour=23, minute=30),
                       id="thu_clinic", replace_existing=True)
         sched.start()
         _scheduler_started = True
