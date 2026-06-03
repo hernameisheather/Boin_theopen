@@ -6,7 +6,7 @@
 <header class="page-header">
   <div>
     <h1>🩺 클리닉 자동기록 관리</h1>
-    <p class="muted small">매주 화/목 클리닉 기록을 자동으로 추가합니다.</p>
+    <p class="muted small">매주 화 · 목 · 토 클리닉 기록을 자동으로 추가합니다.</p>
   </div>
 </header>
 
@@ -14,8 +14,8 @@
   <h2>⚙️ 자동 스케줄러 상태</h2>
   <p>
     {% if scheduler_active %}
-      <span class="status-on">🟢 작동 중</span> —
-      매주 <b>화요일 23:30</b> · <b>목요일 23:30</b> (한국시간) 에 자동 실행됩니다.
+      <span class="status-on">🟢 작동 중</span> — 한국시간 기준:
+      <b>화요일 23:30</b> · <b>목요일 23:30</b> · <b>토요일 13:30</b>
     {% else %}
       <span class="status-off">🔴 비활성</span> — 스케줄러 시작 실패. 서버 재시작 필요.
     {% endif %}
@@ -26,17 +26,21 @@
 <!-- 화요일 클리닉 -->
 <section class="card">
   <h2>📅 화요일 클리닉 ({{ this_tue }})</h2>
-  <p class="muted">대상 학생: <b>{{ tue_students | join(', ') }}</b></p>
+  <p class="muted">정기 학생: <b>{{ tue_students | join(', ') }}</b></p>
 
   <form method="post" class="form">
     <input type="hidden" name="action" value="run_tuesday">
-    <p class="muted small">학생별 추가 메모(선택) — 기본 학습 포인트 외에 이번 회차 특이사항을 적어주세요.</p>
+    <p class="muted small">학생별 추가 메모(선택)</p>
     {% for n in tue_students %}
     <label>
       <span>{{ n }} 추가 메모</span>
       <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
     </label>
     {% endfor %}
+    <label>
+      <span>이번 회차 한정 추가 학생 (선택)</span>
+      <input type="text" name="extra_students" placeholder="예: 김민지, 이도윤 (쉼표 또는 공백 구분)">
+    </label>
     <button type="submit" class="btn-primary">📝 이번주 화요일 클리닉 기록 추가</button>
   </form>
 </section>
@@ -44,7 +48,7 @@
 <!-- 목요일 클리닉 -->
 <section class="card">
   <h2>📅 목요일 클리닉 ({{ this_thu }})</h2>
-  <p class="muted">대상 학생: <b>{{ thu_students | join(', ') }}</b></p>
+  <p class="muted">정기 학생: <b>{{ thu_students | join(', ') }}</b></p>
 
   <form method="post" class="form">
     <input type="hidden" name="action" value="run_thursday">
@@ -55,7 +59,33 @@
       <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
     </label>
     {% endfor %}
+    <label>
+      <span>이번 회차 한정 추가 학생 (선택)</span>
+      <input type="text" name="extra_students" placeholder="예: 김민지, 이도윤 (쉼표 또는 공백 구분)">
+    </label>
     <button type="submit" class="btn-primary">📝 이번주 목요일 클리닉 기록 추가</button>
+  </form>
+</section>
+
+<!-- 토요일 클리닉 -->
+<section class="card">
+  <h2>📅 토요일 클리닉 ({{ this_sat }})</h2>
+  <p class="muted">정기 학생: <b>{{ sat_students | join(', ') }}</b></p>
+
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="run_saturday">
+    <p class="muted small">학생별 추가 메모(선택)</p>
+    {% for n in sat_students %}
+    <label>
+      <span>{{ n }} 추가 메모</span>
+      <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
+    </label>
+    {% endfor %}
+    <label>
+      <span>이번 회차 한정 추가 학생 (선택)</span>
+      <input type="text" name="extra_students" placeholder="예: 신성균 (쉼표 또는 공백 구분)">
+    </label>
+    <button type="submit" class="btn-primary">📝 이번주 토요일 클리닉 기록 추가</button>
   </form>
 </section>
 

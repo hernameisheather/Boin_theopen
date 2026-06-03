@@ -359,8 +359,10 @@ CLINIC_TIPS = [
 CLINIC_STUDENTS_BY_WEEKDAY = {
     1: ["정주원", "유한선"],            # 화요일 클리닉
     3: ["박서원", "장우영", "오우진"],   # 목요일 클리닉
+    5: ["박도환"],                       # 토요일 클리닉
 }
 _BOOTSTRAP_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v1.json")
+_BOOTSTRAP_V2_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v2_sat.json")
 
 
 def _find_or_create_clinic_student(name, students):
@@ -446,6 +448,11 @@ def scheduled_thursday_clinic():
     add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[3])
 
 
+def scheduled_saturday_clinic():
+    date_str = _last_weekday_date(5)
+    add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[5])
+
+
 _scheduler_started = False
 
 def start_clinic_scheduler():
@@ -463,6 +470,9 @@ def start_clinic_scheduler():
         sched.add_job(scheduled_thursday_clinic,
                       CronTrigger(day_of_week="thu", hour=23, minute=30),
                       id="thu_clinic", replace_existing=True)
+        sched.add_job(scheduled_saturday_clinic,
+                      CronTrigger(day_of_week="sat", hour=13, minute=30),
+                      id="sat_clinic", replace_existing=True)
         sched.start()
         _scheduler_started = True
     except Exception as e:
@@ -492,8 +502,30 @@ def run_one_time_bootstrap():
         print(f"[WARN] Bootstrap failed: {e}")
 
 
+def run_one_time_bootstrap_v2_saturday():
+    """이번주 토요일 클리닉 자동 추가: 박도환(정기) + 신성균(1일 한정)."""
+    import json
+    if os.path.exists(_BOOTSTRAP_V2_MARKER):
+        return
+    try:
+        sat_date = _this_week_weekday_date(5)
+        names = list(CLINIC_STUDENTS_BY_WEEKDAY[5]) + ["신성균"]
+        extras = {"신성균": "1일 클리닉 (이번주 한정) 진행."}
+        added, _ = add_clinic_records(sat_date, names, extras)
+        os.makedirs(os.path.dirname(_BOOTSTRAP_V2_MARKER), exist_ok=True)
+        with open(_BOOTSTRAP_V2_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "sat_date": sat_date,
+                "added_students": added,
+            }, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[WARN] Bootstrap v2 (Saturday) failed: {e}")
+
+
 # 모듈 import 시점에 부트스트랩 + 스케줄러 가동
 run_one_time_bootstrap()
+run_one_time_bootstrap_v2_saturday()
 start_clinic_scheduler()
 
 
@@ -1064,16 +1096,24 @@ def admin_student_edit(code):
 def admin_clinic():
     if request.method == "POST":
         action = request.form.get("action", "")
-        weekday = 1 if action == "run_tuesday" else 3 if action == "run_thursday" else None
+        weekday_map = {"run_tuesday": 1, "run_thursday": 3, "run_saturday": 5}
+        weekday = weekday_map.get(action)
         if weekday is None:
             flash("올바르지 않은 요청입니다.", "error")
             return redirect(url_for("admin_clinic"))
 
-        # 날짜: 이번주 해당 요일
         date_str = _this_week_weekday_date(weekday)
+        names = list(CLINIC_STUDENTS_BY_WEEKDAY[weekday])
 
-        # 학생별 추가 메모 수집
-        names = CLINIC_STUDENTS_BY_WEEKDAY[weekday]
+        # 이번 회차 한정 추가 학생 (쉼표/공백으로 구분)
+        extra_names_raw = request.form.get("extra_students", "").strip()
+        if extra_names_raw:
+            for n in extra_names_raw.replace(",", " ").split():
+                n = n.strip()
+                if n and n not in names:
+                    names.append(n)
+
+        # 학생별 추가 메모
         extras = {}
         for n in names:
             note = request.form.get(f"extra_{n}", "").strip()
@@ -1101,8 +1141,10 @@ def admin_clinic():
         "admin_clinic.html",
         tue_students=CLINIC_STUDENTS_BY_WEEKDAY[1],
         thu_students=CLINIC_STUDENTS_BY_WEEKDAY[3],
+        sat_students=CLINIC_STUDENTS_BY_WEEKDAY[5],
         this_tue=_this_week_weekday_date(1),
         this_thu=_this_week_weekday_date(3),
+        this_sat=_this_week_weekday_date(5),
         recent=recent_clinic,
         students=data["students"],
         scheduler_active=_scheduler_started,
