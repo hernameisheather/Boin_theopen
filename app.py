@@ -385,43 +385,65 @@ def _find_or_create_clinic_student(name, students):
 
 
 def add_clinic_records(clinic_date_str, student_names, extras_by_name=None):
-    """클리닉 기록을 추가. (날짜+학생코드+카테고리) 중복은 건너뜀.
-    반환: (추가된 학생명 리스트, 건너뛴 학생명 리스트)
+    """클리닉 기록을 추가/업데이트.
+    - 기존 기록 없으면 새로 추가
+    - 기존 기록 있으면: extra가 있으면 [추가] 행으로 누적, 없으면 건너뜀
+    반환: (added, updated, skipped) 학생명 리스트
     """
     extras_by_name = extras_by_name or {}
     data = load_data()
     students = dict(data["students"])
     records = list(data["records"])
-    existing_keys = {
-        (r.get("date"), r.get("student_code"), r.get("category"))
-        for r in records
-    }
+
+    # 기존 클리닉 기록을 (날짜, 학생코드) → records 인덱스로 매핑
+    existing_idx = {}
+    for i, r in enumerate(records):
+        if (r.get("date") == clinic_date_str
+                and r.get("category") == CLINIC_CATEGORY):
+            existing_idx[r.get("student_code")] = i
 
     added_names = []
+    updated_names = []
     skipped_names = []
+
     for name in student_names:
         code = _find_or_create_clinic_student(name, students)
-        if (clinic_date_str, code, CLINIC_CATEGORY) in existing_keys:
-            skipped_names.append(name)
-            continue
-        tip = random.choice(CLINIC_TIPS)
-        feedback = f"{CLINIC_BASE_FEEDBACK} {tip}"
-        if name in extras_by_name and extras_by_name[name]:
-            feedback += f"\n[추가] {extras_by_name[name].strip()}"
-        records.append({
-            "date": clinic_date_str,
-            "student_code": code,
-            "category": CLINIC_CATEGORY,
-            "score": "완료",
-            "feedback": feedback,
-            "flag": "",
-            "resolved": False,
-        })
-        added_names.append(name)
+        extra = (extras_by_name.get(name, "") or "").strip()
 
-    if added_names:
+        if code in existing_idx:
+            # 이미 존재 — extra 있으면 추가, 없으면 건너뜀
+            if extra:
+                idx = existing_idx[code]
+                cur_fb = records[idx].get("feedback", "")
+                line = f"[추가] {extra}"
+                if line not in cur_fb:
+                    new_fb = cur_fb.rstrip() + ("\n" if cur_fb else "") + line
+                    records[idx]["feedback"] = new_fb
+                    updated_names.append(name)
+                else:
+                    skipped_names.append(name)
+            else:
+                skipped_names.append(name)
+        else:
+            # 신규 기록
+            tip = random.choice(CLINIC_TIPS)
+            feedback = f"{CLINIC_BASE_FEEDBACK} {tip}"
+            if extra:
+                feedback += f"\n[추가] {extra}"
+            records.append({
+                "date": clinic_date_str,
+                "student_code": code,
+                "category": CLINIC_CATEGORY,
+                "score": "완료",
+                "feedback": feedback,
+                "flag": "",
+                "resolved": False,
+            })
+            added_names.append(name)
+
+    if added_names or updated_names:
         save_data(students, records)
-    return added_names, skipped_names
+    return added_names, updated_names, skipped_names
 
 
 def _this_week_weekday_date(weekday_num):
@@ -492,7 +514,7 @@ def run_one_time_bootstrap():
     try:
         tue_date = _this_week_weekday_date(1)  # 이번주 화요일
         extras = {"유한선": "어법성판단 문제 오답 풀이 추가 진행."}
-        added, _ = add_clinic_records(tue_date, CLINIC_STUDENTS_BY_WEEKDAY[1], extras)
+        added, _, _ = add_clinic_records(tue_date, CLINIC_STUDENTS_BY_WEEKDAY[1], extras)
         os.makedirs(os.path.dirname(_BOOTSTRAP_MARKER), exist_ok=True)
         with open(_BOOTSTRAP_MARKER, "w", encoding="utf-8") as f:
             json.dump({
@@ -521,7 +543,7 @@ def run_one_time_bootstrap_v3_thursday():
         else:
             thu_date = (today + timedelta(days=diff)).strftime("%Y-%m-%d")
         names = list(CLINIC_STUDENTS_BY_WEEKDAY[3])
-        added, _ = add_clinic_records(thu_date, names)
+        added, _, _ = add_clinic_records(thu_date, names)
         os.makedirs(os.path.dirname(_BOOTSTRAP_V3_THU_MARKER), exist_ok=True)
         with open(_BOOTSTRAP_V3_THU_MARKER, "w", encoding="utf-8") as f:
             json.dump({
@@ -1165,12 +1187,16 @@ def admin_clinic():
             if note:
                 extras[n] = note
 
-        added, skipped = add_clinic_records(date_str, names, extras)
+        added, updated, skipped = add_clinic_records(date_str, names, extras)
         msg_parts = [f"{date_str} 클리닉 기록"]
         if added:
-            msg_parts.append(f"추가: {', '.join(added)} ({len(added)}명)")
+            msg_parts.append(f"신규 추가 {len(added)}명 ({', '.join(added)})")
+        if updated:
+            msg_parts.append(f"메모 추가됨 {len(updated)}명 ({', '.join(updated)})")
         if skipped:
-            msg_parts.append(f"건너뜀(중복): {', '.join(skipped)} ({len(skipped)}명)")
+            msg_parts.append(f"변경 없음 {len(skipped)}명")
+        if not (added or updated or skipped):
+            msg_parts.append("처리할 학생이 없습니다")
         flash(" · ".join(msg_parts), "success")
         return redirect(url_for("admin_clinic"))
 
