@@ -357,12 +357,14 @@ CLINIC_TIPS = [
     "[학습 포인트] 도치·강조 구문 — 평서문으로 재배열 후 의미 확인.",
 ]
 CLINIC_STUDENTS_BY_WEEKDAY = {
-    1: ["정주원", "유한선"],            # 화요일 클리닉
-    3: ["박서원", "장우영", "오우진"],   # 목요일 클리닉
-    5: ["박도환"],                       # 토요일 클리닉
+    1: ["정주원", "유한선"],                          # 화요일 클리닉
+    3: ["박서원", "장우영", "오우진", "이성우"],       # 목요일 클리닉 (이성우 추가)
+    5: ["박도환"],                                    # 토요일 클리닉
 }
 _BOOTSTRAP_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v1.json")
 _BOOTSTRAP_V2_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v2_sat.json")
+_BOOTSTRAP_V3_THU_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v3_thu.json")
+_CLEANUP_FUTURE_MARKER = os.path.join(DATA_DIR, ".clinic_cleanup_future_v1.json")
 
 
 def _find_or_create_clinic_student(name, students):
@@ -502,30 +504,73 @@ def run_one_time_bootstrap():
         print(f"[WARN] Bootstrap failed: {e}")
 
 
-def run_one_time_bootstrap_v2_saturday():
-    """이번주 토요일 클리닉 자동 추가: 박도환(정기) + 신성균(1일 한정)."""
+def run_one_time_bootstrap_v3_thursday():
+    """이번주 목요일 클리닉 기록 자동 추가 (배포 1회만).
+    오늘이 목요일이면 오늘 날짜로, 이미 지난주이면 가장 가까운 과거 목요일로.
+    """
     import json
-    if os.path.exists(_BOOTSTRAP_V2_MARKER):
+    if os.path.exists(_BOOTSTRAP_V3_THU_MARKER):
         return
     try:
-        sat_date = _this_week_weekday_date(5)
-        names = list(CLINIC_STUDENTS_BY_WEEKDAY[5]) + ["신성균"]
-        extras = {"신성균": "1일 클리닉 (이번주 한정) 진행."}
-        added, _ = add_clinic_records(sat_date, names, extras)
-        os.makedirs(os.path.dirname(_BOOTSTRAP_V2_MARKER), exist_ok=True)
-        with open(_BOOTSTRAP_V2_MARKER, "w", encoding="utf-8") as f:
+        # 미래 날짜 방지: 이번주 목요일이 오늘 이후면 가장 가까운 과거 목요일 사용
+        today = datetime.now()
+        diff = 3 - today.weekday()
+        if diff > 0:
+            # 이번주 목요일이 미래 → 지난주 목요일 (또는 패스)
+            thu_date = (today + timedelta(days=diff - 7)).strftime("%Y-%m-%d")
+        else:
+            thu_date = (today + timedelta(days=diff)).strftime("%Y-%m-%d")
+        names = list(CLINIC_STUDENTS_BY_WEEKDAY[3])
+        added, _ = add_clinic_records(thu_date, names)
+        os.makedirs(os.path.dirname(_BOOTSTRAP_V3_THU_MARKER), exist_ok=True)
+        with open(_BOOTSTRAP_V3_THU_MARKER, "w", encoding="utf-8") as f:
             json.dump({
                 "ran_at": datetime.now().isoformat(),
-                "sat_date": sat_date,
+                "thu_date": thu_date,
                 "added_students": added,
             }, f, ensure_ascii=False)
     except Exception as e:
-        print(f"[WARN] Bootstrap v2 (Saturday) failed: {e}")
+        print(f"[WARN] Bootstrap v3 (Thursday) failed: {e}")
+
+
+def run_cleanup_future_clinic_records():
+    """미래 날짜로 잘못 추가된 클리닉 기록을 일괄 삭제.
+    이전 토요일 부트스트랩이 만든 미래 기록을 정리하기 위한 1회성 작업.
+    """
+    import json
+    if os.path.exists(_CLEANUP_FUTURE_MARKER):
+        return
+    try:
+        data = load_data()
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        records = list(data["records"])
+        before = len(records)
+        records = [
+            r for r in records
+            if not (r.get("category") == CLINIC_CATEGORY
+                    and r.get("date", "") > today_str)
+        ]
+        removed = before - len(records)
+        if removed > 0:
+            save_data(data["students"], records)
+        os.makedirs(os.path.dirname(_CLEANUP_FUTURE_MARKER), exist_ok=True)
+        with open(_CLEANUP_FUTURE_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "removed_count": removed,
+            }, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[WARN] cleanup failed: {e}")
 
 
 # 모듈 import 시점에 부트스트랩 + 스케줄러 가동
+# 순서: (1) 화요일 기록 — 이전 배포에서 이미 실행됨
+#       (2) 미래 클리닉 기록 정리 — 토요일 부트스트랩이 잘못 만든 기록 제거
+#       (3) 이번주 목요일 기록 — 이성우 포함
+#       (4) 스케줄러 가동 — 화 23:30 / 목 23:30 / 토 13:30
 run_one_time_bootstrap()
-run_one_time_bootstrap_v2_saturday()
+run_cleanup_future_clinic_records()
+run_one_time_bootstrap_v3_thursday()
 start_clinic_scheduler()
 
 
