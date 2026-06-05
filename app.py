@@ -343,6 +343,67 @@ def records_for(student_code):
     return items, dict(grouped)
 
 
+# ─── 단어 시험 회차 정의 ──────────────────────────────────
+WORD_TEST_ROUNDS = [
+    {"label": "1회차", "range": "16-20"},
+    {"label": "2회차", "range": "21-23"},
+    {"label": "3회차", "range": "24-26"},
+    {"label": "4회차", "range": "27-28"},
+    {"label": "5회차", "range": "29-30"},
+]
+
+
+def _record_matches_round(record, range_str):
+    """기록이 특정 단어시험 회차에 해당하는지 판단.
+    매칭 기준: 항목 또는 피드백에 range 문자열이 들어있고, 단어/어휘 키워드도 함께 있을 때.
+    """
+    cat = (record.get("category") or "").strip()
+    fb = (record.get("feedback") or "").strip()
+    if not cat and not fb:
+        return False
+    # 공백 정규화
+    range_norm = range_str.replace(" ", "")
+    cat_norm = cat.replace(" ", "")
+    fb_norm = fb.replace(" ", "")
+    # 항목이 정확히 회차 범위인 경우 (예: "16-20")
+    if cat_norm == range_norm:
+        return True
+    # 항목/피드백에 range 포함 + 단어/어휘 키워드 존재
+    has_range = (range_norm in cat_norm) or (range_norm in fb_norm)
+    if not has_range:
+        return False
+    keywords = ["단어", "어휘", "vocab", "word"]
+    return any(k in (cat + fb).lower() if k in ("vocab", "word") else k in (cat + fb)
+               for k in keywords)
+
+
+def compute_word_test_status(student_records):
+    """특정 학생의 기록에서 단어시험 회차별 상태 계산.
+    같은 회차에 여러 기록이 있으면 가장 최근 날짜 기록을 사용.
+    """
+    result = []
+    for round_info in WORD_TEST_ROUNDS:
+        matching = [r for r in student_records
+                    if _record_matches_round(r, round_info["range"])]
+        matching.sort(key=lambda r: r.get("date", ""), reverse=True)
+        latest = matching[0] if matching else None
+        # 숫자 점수 추출 (있으면)
+        numeric_score = None
+        if latest:
+            numeric_score = _parse_score(latest.get("score", ""))
+        result.append({
+            "label": round_info["label"],
+            "range": round_info["range"],
+            "completed": latest is not None,
+            "score": latest.get("score") if latest else None,
+            "numeric_score": numeric_score,
+            "date": latest.get("date") if latest else None,
+            "feedback": latest.get("feedback") if latest else None,
+            "attempts": len(matching),
+        })
+    return result
+
+
 # ─── 클리닉 자동 기록 (매주 화/목) ────────────────────────────
 CLINIC_CATEGORY = "주간 클리닉"
 CLINIC_BASE_FEEDBACK = "주간 혼공학습지 풀이 및 서술형 피드백 완료."
@@ -782,6 +843,11 @@ def my_page():
     my_flags = [r for r in items if r.get("flag") and not r.get("resolved")]
     my_flags.sort(key=lambda r: r["date"], reverse=True)
 
+    # 단어 시험 회차별 완료 상태
+    word_tests = compute_word_test_status(items)
+    word_tests_done = sum(1 for t in word_tests if t["completed"])
+    word_tests_total = len(word_tests)
+
     return render_template(
         "student.html",
         student=student,
@@ -795,6 +861,9 @@ def my_page():
         by_date=by_date,
         ranks=ranks,
         my_flags=my_flags,
+        word_tests=word_tests,
+        word_tests_done=word_tests_done,
+        word_tests_total=word_tests_total,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 

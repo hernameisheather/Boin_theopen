@@ -53,6 +53,56 @@
   </div>
 </section>
 
+<section class="card vocab-zone-card">
+  <h2>📖 단어 시험 완료율 zone
+    <span class="vocab-progress-tag">
+      {{ word_tests_done }} / {{ word_tests_total }}회 완료
+      ({{ ((word_tests_done / word_tests_total) * 100) | round | int }}%)
+    </span>
+  </h2>
+  <table class="records vocab-tests">
+    <thead>
+      <tr>
+        <th style="width:80px">회차</th>
+        <th style="width:90px">범위</th>
+        <th style="width:100px">상태</th>
+        <th style="width:90px">점수</th>
+        <th style="width:120px">최근 응시일</th>
+        <th>피드백</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in word_tests %}
+      <tr class="vocab-row {% if t.completed %}vocab-done{% else %}vocab-pending{% endif %}">
+        <td><b>{{ t.label }}</b></td>
+        <td><code class="vocab-range">{{ t.range }}</code></td>
+        <td>
+          {% if t.completed %}
+          <span class="vocab-status-done">✅ 응시 완료</span>
+          {% else %}
+          <span class="vocab-status-pending">⏳ 미응시</span>
+          {% endif %}
+        </td>
+        <td class="score">
+          {{ t.score if t.completed else '—' }}
+        </td>
+        <td>{{ t.date or '—' }}</td>
+        <td class="feedback">{{ t.feedback or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if word_tests_done == word_tests_total %}
+  <p class="vocab-summary all-done">🎉 모든 회차 완료! 수고했어요.</p>
+  {% else %}
+  <p class="vocab-summary">남은 회차:
+    {% for t in word_tests if not t.completed %}
+      <span class="vocab-pending-badge">{{ t.label }} ({{ t.range }})</span>
+    {% endfor %}
+  </p>
+  {% endif %}
+</section>
+
 {% if messages %}
 <section class="card message-card">
   <h2>💬 신쌤의 한마디</h2>
