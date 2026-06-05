@@ -377,9 +377,28 @@ def _record_matches_round(record, range_str):
                for k in keywords)
 
 
+def _is_word_test_completed(score):
+    """점수 텍스트가 '실제로 응시 완료'인지 판단.
+    '미완료', '미응시', '미제출', '결석' 등이 포함되면 False.
+    """
+    if not score:
+        return False
+    s = str(score).strip()
+    if not s:
+        return False
+    incomplete_markers = ["미완료", "미응시", "미시행", "미제출", "결석", "패스"]
+    for marker in incomplete_markers:
+        if marker in s:
+            return False
+    return True
+
+
 def compute_word_test_status(student_records):
     """특정 학생의 기록에서 단어시험 회차별 상태 계산.
     같은 회차에 여러 기록이 있으면 가장 최근 날짜 기록을 사용.
+    상태 분류:
+      - completed: 기록 있음 + 점수가 '미완료' 등이 아닌 경우
+      - has_record: 기록이 존재 (점수 무관)
     """
     result = []
     for round_info in WORD_TEST_ROUNDS:
@@ -387,15 +406,16 @@ def compute_word_test_status(student_records):
                     if _record_matches_round(r, round_info["range"])]
         matching.sort(key=lambda r: r.get("date", ""), reverse=True)
         latest = matching[0] if matching else None
-        # 숫자 점수 추출 (있으면)
-        numeric_score = None
-        if latest:
-            numeric_score = _parse_score(latest.get("score", ""))
+        score_text = latest.get("score", "") if latest else None
+        numeric_score = _parse_score(score_text) if score_text else None
+        has_record = latest is not None
+        completed = has_record and _is_word_test_completed(score_text)
         result.append({
             "label": round_info["label"],
             "range": round_info["range"],
-            "completed": latest is not None,
-            "score": latest.get("score") if latest else None,
+            "has_record": has_record,
+            "completed": completed,
+            "score": score_text,
             "numeric_score": numeric_score,
             "date": latest.get("date") if latest else None,
             "feedback": latest.get("feedback") if latest else None,

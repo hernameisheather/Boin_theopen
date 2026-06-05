@@ -73,18 +73,20 @@
     </thead>
     <tbody>
       {% for t in word_tests %}
-      <tr class="vocab-row {% if t.completed %}vocab-done{% else %}vocab-pending{% endif %}">
+      <tr class="vocab-row {% if t.completed %}vocab-done{% elif t.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
         <td><b>{{ t.label }}</b></td>
         <td><code class="vocab-range">{{ t.range }}</code></td>
         <td>
           {% if t.completed %}
           <span class="vocab-status-done">✅ 응시 완료</span>
+          {% elif t.has_record %}
+          <span class="vocab-status-incomplete">📝 응시 미완료</span>
           {% else %}
           <span class="vocab-status-pending">⏳ 미응시</span>
           {% endif %}
         </td>
         <td class="score">
-          {{ t.score if t.completed else '—' }}
+          {{ t.score if t.has_record else '—' }}
         </td>
         <td>{{ t.date or '—' }}</td>
         <td class="feedback">{{ t.feedback or '' }}</td>
