@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>보신반 중간평가 재시험 (Day 6 - Day 9)</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --ink:#1f2430; --sub:#5b6472;
+    --line:#e3e6eb; --brand:#2f6df6; --brand-d:#1b4fd0;
+    --ok:#13a463; --okbg:#e7f7ef; --bad:#e0492f; --badbg:#fdece8;
+    --warn:#b7791f; --warnbg:#fdf3e3; --pick:#e8f0ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+    line-height:1.7;-webkit-text-size-adjust:100%}
+  .wrap{max-width:820px;margin:0 auto;padding:20px 16px 80px}
+
+  header.top{background:linear-gradient(135deg,#2f6df6,#1b4fd0);color:#fff;
+    border-radius:18px;padding:22px 22px;box-shadow:0 8px 24px rgba(47,109,246,.25)}
+  header.top h1{margin:0 0 6px;font-size:20px;letter-spacing:-.3px}
+  header.top .meta{font-size:13px;opacity:.95}
+  .hud{display:flex;gap:10px;margin:14px 0 0;flex-wrap:wrap;align-items:center}
+  .hud .who-tag{flex:1;min-width:180px;background:rgba(255,255,255,.18);border-radius:10px;
+    padding:11px 12px;font-size:15px;font-weight:700}
+  .timer{background:rgba(255,255,255,.18);border-radius:10px;padding:11px 14px;
+    font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;min-width:108px;text-align:center}
+  .timer.danger{background:#fff;color:var(--bad)}
+  .prev-note{margin-top:10px;font-size:12.5px;background:rgba(255,255,255,.15);
+    border-radius:8px;padding:8px 11px}
+
+  .sec{margin:26px 4px 10px;font-weight:800;font-size:15px;color:var(--brand-d);
+    border-left:4px solid var(--brand);padding-left:10px}
+
+  .q{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:18px 18px 14px;margin:12px 0;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .q .qhead{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
+  .q .num{background:var(--brand);color:#fff;border-radius:8px;font-weight:800;
+    min-width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+  .q .tag{font-size:12px;color:var(--sub);background:#eef1f6;border-radius:6px;padding:2px 8px;align-self:center}
+  .q .pts{margin-left:auto;font-size:12px;color:var(--sub);align-self:center}
+  .q .ask{font-weight:700;margin:2px 0 10px;font-size:15px}
+  .passage{background:#fafbfc;border:1px solid var(--line);border-radius:12px;
+    padding:13px 14px;font-size:14.5px;color:#2b3240;white-space:pre-wrap;margin-bottom:12px}
+  .passage .u{text-decoration:underline;text-underline-offset:3px}
+
+  .opts{display:flex;flex-direction:column;gap:8px}
+  .opt{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--line);
+    border-radius:11px;padding:10px 12px;cursor:pointer;transition:.12s;background:#fff;font-size:14.5px}
+  .opt:hover{border-color:#b9c6e6;background:#f7f9ff}
+  .opt.sel{border-color:var(--brand);background:var(--pick)}
+  .opt .mk{font-weight:800;color:var(--brand);flex:none}
+  .opt.locked{cursor:default}
+  .opt.correct{border-color:var(--ok);background:var(--okbg)}
+  .opt.wrong{border-color:var(--bad);background:var(--badbg)}
+
+  textarea,.short{width:100%;border:1.5px solid var(--line);border-radius:11px;
+    padding:11px 12px;font-size:14.5px;font-family:inherit;resize:vertical}
+  textarea:focus,.short:focus{outline:none;border-color:var(--brand)}
+  .choicebox{font-size:13.5px;color:var(--sub);background:#f1f4f9;border-radius:8px;
+    padding:8px 11px;margin:8px 0;display:inline-block}
+  .blanks{display:flex;gap:10px;flex-wrap:wrap}
+  .blanks .bl{flex:1;min-width:140px}
+  .blanks label{font-size:13px;color:var(--sub);font-weight:700}
+
+  .arrAns{min-height:48px;border:1.5px dashed #b9c6e6;border-radius:11px;padding:10px;
+    display:flex;flex-wrap:wrap;gap:7px;background:#f7f9ff;margin-bottom:10px;align-items:center}
+  .arrAns .ph{color:#9aa4b2;font-size:13.5px}
+  .arrHint{font-size:12.5px;color:var(--sub);margin-bottom:6px}
+  .arrBank{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:9px 13px;
+    font-size:15px;font-family:inherit;cursor:pointer;transition:.1s;line-height:1}
+  .chip:hover{border-color:var(--brand);background:#eef4ff}
+  .arrAns .chip{border-color:var(--brand);background:#e3edff;font-weight:600}
+  .arrReset{padding:7px 13px;font-size:13px;margin-top:10px}
+
+  .fb{margin-top:11px;border-radius:11px;padding:10px 12px;font-size:13.5px;display:none}
+  .fb.show{display:block}
+  .fb.r-ok{background:var(--okbg);border:1px solid #b6e6cd}
+  .fb.r-bad{background:var(--badbg);border:1px solid #f4c2b8}
+  .fb.r-rev{background:var(--warnbg);border:1px solid #f0dcb0}
+  .fb b{color:inherit}
+  .fb .ans{font-weight:800}
+  .fb .exp{margin-top:4px;color:var(--sub)}
+
+  .actions{position:sticky;bottom:0;margin-top:24px;padding:14px;background:rgba(244,245,247,.92);
+    backdrop-filter:blur(6px);border-top:1px solid var(--line);display:flex;gap:10px}
+  .btn{border:none;border-radius:12px;padding:14px 18px;font-size:15px;font-weight:800;cursor:pointer}
+  .btn.primary{background:var(--brand);color:#fff;flex:1}
+  .btn.primary:hover{background:var(--brand-d)}
+  .btn.ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+
+  .score{display:none;background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:20px;margin:14px 0;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.06)}
+  .score.show{display:block}
+  .score .big{font-size:40px;font-weight:900;color:var(--brand)}
+  .score .big small{font-size:18px;color:var(--sub);font-weight:700}
+  .score .who{font-size:15px;color:var(--sub);margin-bottom:6px}
+  .score .brk{font-size:13.5px;color:var(--sub);margin-top:8px}
+  .note{font-size:12.5px;color:var(--sub);text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>보신반 중간평가 재시험지 (Day 6 ~ Day 9)</h1>
+    <div class="meta">제한 시간 30분 · 총점 50점 · 객관식 11문항(각 3점, 33점) + 서술형 3문항(5·8·4점, 17점)</div>
+    <div class="hud">
+      <div class="who-tag">응시자 : {{ student_name }}</div>
+      <div class="timer" id="timer">30:00</div>
+    </div>
+    {% if prev_score %}
+    <div class="prev-note">이미 응시한 기록이 있습니다 (이전 점수 {{ prev_score }}/{{ exam_max }}점). 다시 제출하면 새 점수로 교체됩니다.</div>
+    {% endif %}
+  </header>
+
+  <div class="score" id="scoreBox"></div>
+
+  <div class="sec">■ 객관식 문항 (각 3점)</div>
+  <div id="mcArea"></div>
+
+  <div class="sec">■ 서술형 문항</div>
+  <div id="saArea"></div>
+
+  <div class="actions">
+    <button class="btn ghost" id="resetBtn">처음부터</button>
+    <button class="btn primary" id="submitBtn">제출하고 채점하기</button>
+  </div>
+  <div class="note">제출하면 서버에서 자동 채점되어, 내 페이지의 '평가 zone'에 점수가 저장됩니다.</div>
+</div>
+
+<script>
+const STUDENT_NAME = {{ student_name|tojson }};
+
+/* ===================== 문제 데이터 (정답 제외) ===================== */
+const MC = [
+ {n:1, tag:"Day06-3 · 어휘 적절성", pts:3,
+  ask:"다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 않은 것은?",
+  passage:`Technologists are always on the lookout for quantifiable metrics. Measurable inputs to a model are their lifeblood, and like a social scientist, a technologist needs to identify concrete measures, or "proxies," for assessing progress. But simple metrics can take us ① <span class="u">closer</span> to the important goals we really care about, which may require complicated metrics or be extremely difficult, or perhaps impossible, to reduce to any measure. And when we have ② <span class="u">imperfect</span> proxies, we can easily fall under the illusion that we are solving for a good end without actually making genuine progress toward a worthy solution. The problem of proxies results in technologists frequently ③ <span class="u">substituting</span> what is measurable for what is meaningful. As the saying goes, "Not everything that ④ <span class="u">counts</span> can be counted, and not everything that can be counted ⑤ <span class="u">counts</span>."`,
+  opts:["closer","imperfect","substituting","counts","counts"]},
+
+ {n:2, tag:"Day06-4 · 문장 삽입", pts:3,
+  ask:"글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.",
+  passage:`[주어진 문장] Always new structure is based on old structure, and at every stage selection favors some cells and eliminates others.
+
+Development of the human body from a single cell provides many examples of the structural richness that is possible when the repeated production of random variation is combined with nonrandom selection. All phases of body development from embryo to adult exhibit random activities at the cellular level, and body formation depends on the new possibilities generated by these activities coupled with selection of those outcomes that satisfy previously built-in criteria. ( ① ) The survivors serve to produce new cells that undergo further rounds of selection. ( ② ) Except in the immune system, cells and extensions of cells are not genetically selected during development, but rather, are positionally selected. ( ③ ) Those in the right place that make the right connections are stimulated, and those that don't are eliminated. ( ④ ) This process is much like sculpting. ( ⑤ ) A natural consequence of the strategy is great variability from individual to individual at the cell and molecular levels, even though large-scale structures are quite similar.`,
+  opts:["①","②","③","④","⑤"]},
+
+ {n:3, tag:"Day06-6 · 빈칸 추론", pts:3,
+  ask:"다음 글의 빈칸에 들어갈 말로 가장 적절한 것을 고르시오.",
+  passage:`Emotion socialization ─ learning from other people about emotions and how to deal with them ─ starts early in life and plays a foundational role for emotion regulation development. Although extra-familial influences, such as peers or media, gain in importance during adolescence, parents remain the primary socialization agents. Whereas direct soothing and directive guidance of what to do are beneficial for younger children, they may intrude on adolescents' autonomy striving. In consequence, adolescents might pull away from, rather than turn toward, their parents in times of emotional crisis, unless ______________________________. More suitable in adolescence is indirect support of autonomous emotion regulation, such as through interest in, as well as awareness and nonjudgmental acceptance of, adolescents' emotional experiences, and being available when the adolescent wants to talk.`,
+  opts:["parents maintain strict authority over social media exposure",
+        "parental practices are adjusted to match their changing needs",
+        "adolescents completely reject any kind of emotional acceptance",
+        "external influences outweigh familial roles in emotional stability",
+        "direct methods of intervention are consistently reinforced"]},
+
+ {n:4, tag:"Day07-1 · 순서 배열", pts:3,
+  ask:"주어진 글 다음에 이어질 글의 순서로 가장 적절한 것을 고르시오.",
+  passage:`In response to human-like care robots, critics might charge that human-robot interactions create moral hazards for dementia patients.
+
+(A) Reasoning along similar lines, John Sullins, a professor at Sonoma State University, holds that robots should "remain iconic or cartoonish so that they are easily distinguished as synthetic even by unsophisticated users." At least then no one is fooled.
+(B) Even if deception is sometimes allowed when it serves worthy goals, should it be allowed for vulnerable users? Just as children on the autism spectrum with robot companions might be easily fooled into thinking of robots as friends, older adults with cognitive deficits might be. According to Alexis Elder, a professor at UMD, robots are false friends, inferior to true friendship.
+(C) Making robots clearly fake also avoids the so-called "uncanny valley," where robots are perceived as scary because they so closely resemble us, but not quite. Other critics of robot deception argue that when care recipients are deceived into thinking that robots care, this crosses a line and violates human dignity.`,
+  opts:["(A)-(C)-(B)","(B)-(C)-(A)","(C)-(A)-(B)","(B)-(A)-(C)","(C)-(B)-(A)"]},
+
+ {n:5, tag:"Day07-2 · 어법 오류", pts:3,
+  ask:"다음 글의 밑줄 친 부분 중, 어법상 틀린 것을 고르시오.",
+  passage:`Information encountered after an event can influence subsequent remembering. External information can easily ① <span class="u">integrate</span> into a witness's memory, especially if the event was poorly encoded or the memory is from a distant event, in which case time and forgetting ② <span class="u">have</span> degraded the original memory. With reduced information available in memory with which ③ <span class="u">to confirm</span> the validity of post-event misinformation, it is less likely that this new information will be rejected. Instead, especially when it fits the witness's current thinking and can be used to create a story that makes sense to him or her, it may ④ <span class="u">be integrated</span> as part of the original experience. This process can be explicit (i.e., the witness knows it is happening), but it is often ⑤ <span class="u">unconsciously</span>. That is, the witness might find himself or herself thinking about the event differently without awareness.`,
+  opts:["integrate","have","to confirm","be integrated","unconsciously"]},
+
+ {n:6, tag:"Day07-3 · 어휘 적절성", pts:3,
+  ask:"다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 않은 것은?",
+  passage:`Correlations are powerful because the insights they offer are relatively clear. These insights are often covered up when we bring causality back into the picture. For instance, a used-car dealer supplied data to statisticians to predict which of the vehicles available for purchase at an auction was likely to have problems. A correlation analysis showed that orange-colored cars were a lot ① <span class="u">less</span> likely to have defects. Even as we read this, we already think about why it might be so: Are orange-colored car owners likely to be car enthusiasts and take better care of their vehicles? Or, is it because orange-colored cars are more ② <span class="u">noticeable</span> on the road and therefore less likely to be in accidents, so they're in better condition when they're resold? Quickly we are caught in a web of ③ <span class="u">competing</span> causal hypotheses. But our attempts to ④ <span class="u">obscure</span> things this way only makes it cloudier. Correlations exist; we can show them mathematically. We can't easily do the same for causal links. So we would do well ⑤ <span class="u">holding</span> off from trying to explain the reason behind the correlations.`,
+  opts:["less","noticeable","competing","obscure","holding"]},
+
+ {n:7, tag:"Day07-4 · 제목 추론", pts:3,
+  ask:"다음 글의 제목으로 가장 적절한 것을 고르시오.",
+  passage:`For a long time, random sampling was a good shortcut. It made analysis of large data problems possible in the pre-digital era. But much as converting a digital image or song into a smaller file results in loss of data, information is lost when sampling. Having the full (or close to the full) dataset provides a lot more freedom to explore, to look at the data from different angles or to look closer at certain aspects of it. A fitting example may be the light-field camera, which captures not just a single plane of light, as with conventional cameras, but rays from the entire light field, some 11 million of them. The photographers can decide later which element of an image to focus on in the digital file. There is no need to focus at the beginning, since collecting all the information makes it possible to do that afterwards. Because rays from the entire light field are included, it is closer to all the data. As a result, the information is more versatile than ordinary pictures, where the photographer has to decide what to focus on before she presses the shutter.`,
+  opts:["Paradox of Big Data: Why Sampling Remains the Best Option",
+        "Conventional Photography vs. High-Definition Digital Editing",
+        "Technical Difficulties in Controlling Light Rays of Modern Cameras",
+        "Pre-digital Era Shortcuts: How Statisticians Handled Massive Data",
+        "Embracing the Whole Dataset: Moving Beyond the Loss of Sampling"]},
+
+ {n:8, tag:"Day08-1 · 어휘 적절성", pts:3,
+  ask:"다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 않은 것은?",
+  passage:`It's remarkable that positive fantasies help us relax to such an extent that it shows up in physiological tests. If you want to unwind, you can take some deep breaths, get a massage, or go for a walk ─ but you can also try simply closing your eyes and fantasizing about some future outcome that you might enjoy. But what about when your objective is to make your wish a reality? The last thing you want to be is ① <span class="u">relaxed</span>. You want to be ② <span class="u">energized</span> enough to get off the couch and lose those pounds or find that job or study for that test, and you want to be motivated enough to stay engaged even when the inevitable obstacles or challenges arise. The principle of "Dream it. Wish it. Do it." does not hold true, and now we know why: in dreaming it, you ③ <span class="u">boost</span> the energy you need to do it. You put yourself in a temporary state of complete happiness, ④ <span class="u">calmness</span> ─ and ⑤ <span class="u">inactivity</span>.`,
+  opts:["relaxed","energized","boost","calmness","inactivity"]},
+
+ {n:9, tag:"Day08-4 · 요약문 완성", pts:3,
+  ask:"빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?",
+  passage:`The irony of early democracy in Europe is that it thrived and prospered precisely because European rulers for a very long time were remarkably weak. For more than a millennium after the fall of Rome, European rulers lacked the ability to assess what their people were producing and to levy substantial taxes based on this. The most striking way to illustrate European weakness is to show how little revenue they collected. Europeans would eventually develop strong systems of revenue collection, but it took them an awfully long time to do so. In medieval times, and for part of the early modern era, Chinese emperors and Muslim caliphs were able to extract much more of economic production than any European ruler with the exception of small city-states.
+
+↓  Early European democracy ironically flourished due to the (A)__________ of its rulers in extracting economic production, unlike their highly (B)__________ Asian and Middle Eastern counterparts.`,
+  opts:["decentralization --- powerless","incompetence --- centralized","dominance --- weak",
+        "benevolence --- collaborative","vulnerability --- fractured"]},
+
+ {n:10, tag:"Day09-3 · 문장 삽입", pts:3,
+  ask:"주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.",
+  passage:`[주어진 문장] Popular thinking said surgery didn't require clean instruments, yet Joseph Lister studied the high death rates in hospitals and introduced antiseptic practices that immediately saved lives.
+
+Many people look for safety and security in popular thinking. They figure that if a lot of people are doing something, then it must be right. It must be a good idea. If most people accept it, then it probably represents fairness, equality, compassion, and sensitivity, right? Not necessarily. ( ① ) Popular thinking said the earth was the center of the universe, yet Copernicus studied the stars and planets and proved mathematically that the earth and the other planets in our solar system revolved around the sun. ( ② ) Popular thinking said that women shouldn't have the right to vote, yet people like Emmeline Pankhurst and Susan B. Anthony fought for and won that right. ( ③ ) We must always remember there is a huge difference between acceptance and intelligence. ( ④ ) People may say that there's safety in numbers, but that's not always true. ( ⑤ )`,
+  opts:["①","②","③","④","⑤"]},
+
+ {n:11, tag:"Day09-6 · 내용 불일치", pts:3,
+  ask:"According to the passage, which of the following is NOT true?",
+  passage:`Over the past several decades, there have been some agreements to reduce the debt of poor nations, but other economic challenges (like trade barriers) remain. Nontariff trade measures, such as quotas, subsidies, and restrictions on exports, are increasingly prevalent and may be enacted for policy reasons having nothing to do with trade. However, they have a discriminatory effect on exports from countries that lack the resources to comply with requirements of nontariff measures imposed by rich nations. For example, the huge subsidies that rich nations give to their farmers make it very difficult for farmers in the rest of the world to compete with them. Similarly, there would be domestic health or safety regulations, which, though not specifically targeting imports, could impose significant costs on foreign manufacturers seeking to conform to the importer's market. Industries in developing markets may have more difficulty absorbing these additional costs.`,
+  opts:["Poor nations still face trade barriers despite global efforts to reduce their debts.",
+        "Nontariff trade measures can be implemented for non-commercial policy objectives.",
+        "Rich nations' agricultural subsidies hinder fair competition for global farmers.",
+        "Importers' domestic safety regulations can lead to substantial financial burdens for foreign suppliers.",
+        "Developing countries effortlessly adapt to international safety regulations due to financial aid."]}
+];
+
+const SA = [
+ {n:"서술형 1", tag:"Day09-1 · 배열 영작", pts:5,
+  ask:"다음 글을 읽고, 아래 단어 덩이를 모두 한 번씩 사용해 순서대로 배열하여 글의 요약문을 완성하시오. (단어를 클릭하면 순서대로 배열되고, 배열된 단어를 다시 클릭하면 빠집니다.)",
+  passage:`Education must focus on the trunk of the tree of knowledge, revealing the ways in which the branches, twigs, and leaves all emerge from a common core. Tools for thinking stem from this core, providing a common language with which practitioners in different fields may share their experience of the process of innovation and discover links between their creative activities. When the same terms are employed across the curriculum, students begin to link different subjects and classes. If they practice abstracting in writing class, if they work on abstracting in painting or drawing class, and if, in all cases, they call it abstracting, they begin to understand how to think beyond disciplinary boundaries. They see how to transform their thoughts from one mode of conception and expression to another. Linking the disciplines comes naturally when the terms and tools are presented as part of a universal imagination.`,
+  lead:"____________________________________________________________",
+  choice:"",
+  type:"arrange",
+  bank:["different","allow","Shared","disciplines","to","tools","academic","thinking","link","students"]},
+
+ {n:"서술형 2", tag:"Day07-5 · 어형 변화", pts:8,
+  ask:"다음 글을 읽고, 요약문의 빈칸 (A),(B)에 들어갈 가장 알맞은 단어를 <보기>에서 골라 어법에 맞게 변형하여 쓰시오. (반드시 형태를 변형할 것)",
+  passage:`By the nineteenth century, France had developed a system of precisely defined units of measurement to capture space, time, and more, and had begun to get other nations to adopt the same standards. Just half a century later, in the 1920s, the discoveries of quantum mechanics forever destroyed the dream of comprehensive and perfect measurement. And yet, outside a relatively small circle of physicists, the mindset of humankind's drive to flawlessly measure continued among engineers and scientists. In the world of business it even expanded, as the precision-oriented sciences of mathematics and statistics began to influence all areas of commerce. However, contrary to the trend of the past several decades, in many new situations that are occurring today, allowing for imprecision ─ for messiness ─ may be a positive feature, not a shortcoming. As a tradeoff for relaxing the standards of allowable errors, one can get a hold of much more data. It isn't just that "more is better than some," but that, in fact, sometimes "more is greater than better."`,
+  lead:"In contrast to the historical obsession with flawless standards, contemporary data collection benefits from (A)____________ strict measurement criteria, thereby (B)____________ a much larger volume of information.",
+  choice:"< 보기 >  acquire / relax / demand / tighten   (반드시 형태 변형)",
+  type:"ab"},
+
+ {n:"서술형 3", tag:"Day07-3 · 빈칸 배열 영작", pts:4,
+  ask:"다음 글을 읽고, 요약문의 빈칸에 들어갈 말을 <보기>에서 골라 순서대로 배열하여 완성하시오. (빈칸에는 8개의 단어가 들어가며, <보기>의 12개 단어 중 필요한 8개만 사용할 것 / 단어 변형 금지. 단어를 클릭하면 순서대로 배열되고, 다시 클릭하면 빠집니다.)",
+  passage:`Correlations are powerful because the insights they offer are relatively clear. These insights are often covered up when we bring causality back into the picture. For instance, a used-car dealer supplied data to statisticians to predict which of the vehicles available for purchase at an auction was likely to have problems. A correlation analysis showed that orange-colored cars were a lot less likely to have defects. Even as we read this, we already think about why it might be so: Are orange-colored car owners likely to be car enthusiasts and take better care of their vehicles? Or, is it because orange-colored cars are more noticeable on the road and therefore less likely to be in accidents, so they're in better condition when they're resold? Quickly we are caught in a web of competing causal hypotheses. But our attempts to explain things this way only make it cloudier. Correlations exist; we can show them mathematically. We can't easily do the same for causal links. So we would do well holding off from trying to explain the reason behind the correlations.`,
+  lead:"Correlations offer clear insights, but ________________________________________________ .",
+  choice:"< 보기 > (필요한 8개만 사용)  searching / clarity / causal / proves / explanations / more / obvious / for / creates / causality / only / confusion",
+  type:"arrange",
+  bank:["causal","clarity","searching","proves","explanations","more","obvious","for","creates","causality","only","confusion"]}
+];
+
+/* ===================== 렌더링 ===================== */
+const CIR=["①","②","③","④","⑤"];
+const mcArea=document.getElementById("mcArea");
+const saArea=document.getElementById("saArea");
+let submitted=false;
+
+MC.forEach(q=>{
+  const card=document.createElement("div");card.className="q";card.dataset.n=q.n;
+  card.innerHTML=`
+   <div class="qhead">
+     <div class="num">${q.n}</div>
+     <div class="tag">${q.tag}</div>
+     <div class="pts">${q.pts}점</div>
+   </div>
+   <div class="ask">${q.ask}</div>
+   <div class="passage">${q.passage}</div>
+   <div class="opts">${q.opts.map((o,i)=>
+     `<div class="opt" data-i="${i+1}"><span class="mk">${CIR[i]}</span><span>${o}</span></div>`).join("")}</div>
+   <div class="fb"></div>`;
+  mcArea.appendChild(card);
+  card.querySelectorAll(".opt").forEach(op=>{
+    op.addEventListener("click",()=>{
+      if(card.dataset.locked)return;
+      card.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));
+      op.classList.add("sel");card.dataset.pick=op.dataset.i;
+    });
+  });
+});
+
+SA.forEach((q,idx)=>{
+  const card=document.createElement("div");card.className="q";card.dataset.sa=idx;
+  let inputHtml;
+  if(q.type==="ab"){
+    inputHtml=`<div class="blanks">
+      <div class="bl"><label>(A)</label><input class="short" data-k="A" autocomplete="off"></div>
+      <div class="bl"><label>(B)</label><input class="short" data-k="B" autocomplete="off"></div></div>`;
+  }else if(q.type==="arrange"){
+    inputHtml=`<div class="arrHint">↓ 아래 단어를 클릭해 순서대로 배열하세요</div>
+      <div class="arrAns" data-k="ans"><span class="ph">여기에 단어가 순서대로 배열됩니다</span></div>
+      <div class="arrBank" data-k="bank"></div>
+      <button type="button" class="btn ghost arrReset">↺ 초기화</button>`;
+  }else{
+    inputHtml=`<textarea rows="2" data-k="line" placeholder="여기에 영작하세요"></textarea>`;
+  }
+  card.innerHTML=`
+   <div class="qhead">
+     <div class="num" style="min-width:auto;padding:0 8px">${q.n}</div>
+     <div class="tag">${q.tag}</div>
+     <div class="pts">${q.pts}점</div>
+   </div>
+   <div class="ask">${q.ask}</div>
+   <div class="passage">${q.passage}</div>
+   <div class="passage" style="background:#fff7ef;border-color:#f0dcb0;margin-top:-2px"><b>[요약문]</b><br>${q.lead}</div>
+   ${q.choice?`<div class="choicebox">${q.choice}</div>`:""}
+   ${inputHtml}
+   <div class="fb"></div>`;
+  saArea.appendChild(card);
+  if(q.type==="arrange")setupArrange(card,q);
+});
+
+function setupArrange(card,q){
+  const bank=card.querySelector('[data-k="bank"]');
+  const ans=card.querySelector('[data-k="ans"]');
+  const ph=ans.querySelector(".ph");
+  const refresh=()=>{ph.style.display=ans.querySelectorAll(".chip").length?"none":"inline";};
+  q.bank.forEach(w=>{
+    const c=document.createElement("button");
+    c.type="button";c.className="chip";c.textContent=w;c.dataset.w=w;
+    c.addEventListener("click",()=>{
+      if(card.dataset.locked)return;
+      (c.parentNode===bank?ans:bank).appendChild(c);refresh();
+    });
+    bank.appendChild(c);
+  });
+  card.querySelector(".arrReset").addEventListener("click",()=>{
+    if(card.dataset.locked)return;
+    ans.querySelectorAll(".chip").forEach(c=>bank.appendChild(c));refresh();
+  });
+  refresh();
+}
+
+/* ===================== 제출 (서버 채점) ===================== */
+document.getElementById("submitBtn").addEventListener("click",submit);
+
+function collectAnswers(){
+  const mc={};
+  MC.forEach(q=>{
+    const card=mcArea.querySelector(`.q[data-n="${q.n}"]`);
+    mc[q.n]=Number(card.dataset.pick||0);
+  });
+  const arrWords=saIdx=>{
+    const c=saArea.querySelector(`.q[data-sa="${saIdx}"] [data-k="ans"]`);
+    return [...c.querySelectorAll(".chip")].map(x=>x.dataset.w);
+  };
+  const c2=saArea.querySelector('.q[data-sa="1"]');
+  return {
+    mc,
+    sa1:arrWords(0),
+    sa2:{A:c2.querySelector('[data-k="A"]').value, B:c2.querySelector('[data-k="B"]').value},
+    sa3:arrWords(2),
+  };
+}
+
+async function submit(){
+  if(submitted)return;
+  submitted=true;
+  clearInterval(timerInt);
+  const btn=document.getElementById("submitBtn");
+  btn.disabled=true;btn.textContent="채점 중…";
+  let res;
+  try{
+    const r=await fetch("/retake/submit",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(collectAnswers()),
+    });
+    if(!r.ok)throw new Error("bad status");
+    res=await r.json();
+  }catch(e){
+    submitted=false;btn.disabled=false;btn.textContent="제출하고 채점하기";
+    alert("제출 중 오류가 발생했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+    return;
+  }
+  renderResult(res);
+}
+
+function renderResult(res){
+  // 객관식
+  res.mc_results.forEach(m=>{
+    const card=mcArea.querySelector(`.q[data-n="${m.n}"]`);
+    card.dataset.locked="1";
+    const opts=card.querySelectorAll(".opt");
+    opts.forEach(o=>o.classList.add("locked"));
+    if(opts[m.ans-1])opts[m.ans-1].classList.add("correct");
+    const fb=card.querySelector(".fb");
+    if(m.ok){
+      fb.className="fb show r-ok";
+      fb.innerHTML=`<b>✔ 정답</b> · <span class="ans">정답 ${CIR[m.ans-1]}</span><div class="exp">${m.exp}</div>`;
+    }else{
+      if(m.pick&&opts[m.pick-1])opts[m.pick-1].classList.add("wrong");
+      fb.className="fb show r-bad";
+      fb.innerHTML=`<b>✘ ${m.pick?"오답":"미응답"}</b> · <span class="ans">정답 ${CIR[m.ans-1]}</span><div class="exp">${m.exp}</div>`;
+    }
+  });
+  // 서술형
+  res.sa_results.forEach((s,idx)=>{
+    const card=saArea.querySelector(`.q[data-sa="${idx}"]`);
+    card.dataset.locked="1";
+    card.querySelectorAll("input,textarea").forEach(e=>e.disabled=true);
+    const fb=card.querySelector(".fb");
+    const full=s.got===s.max;
+    const extra=(s.a_ok!==undefined)?` · (A) ${s.a_ok?"O":"X"} / (B) ${s.b_ok?"O":"X"}`:"";
+    const head=full?"✔ 정답":(s.got>0?`△ 부분 정답 (${s.got}/${s.max})`:`✘ 오답 (${s.got}/${s.max})`);
+    fb.className="fb show "+(full?"r-ok":(s.got>0?"r-rev":"r-bad"));
+    fb.innerHTML=`<b>${head}</b>${extra}
+      <div class="exp"><span class="ans">모범답안: ${s.model}</span><br>${s.exp}</div>`;
+  });
+  // 점수 배너
+  const sb=document.getElementById("scoreBox");
+  sb.className="score show";
+  sb.innerHTML=`
+    <div class="who">${STUDENT_NAME} 님의 결과</div>
+    <div class="big">${res.score}<small> / ${res.max}점</small></div>
+    <div class="brk">객관식 ${res.mc_str}문항 · 서술형 ${res.sa_str}점</div>
+    <div class="note">점수가 내 페이지의 '평가 zone'에 자동 저장되었습니다.</div>
+    <div style="margin-top:12px"><a class="btn primary" style="display:inline-block;text-decoration:none" href="/me">내 페이지로 돌아가기</a></div>`;
+  const btn=document.getElementById("submitBtn");
+  btn.disabled=true;btn.textContent="제출 완료";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  if(submitted)return;
+  if(!confirm("선택한 답을 모두 지우고 처음부터 다시 풉니다. 계속할까요?"))return;
+  location.reload();
+});
+
+/* ===================== 타이머 (30분) ===================== */
+let left=30*60;const tEl=document.getElementById("timer");let timerInt;
+function tick(){
+  const m=String(Math.floor(left/60)).padStart(2,"0");
+  const s=String(left%60).padStart(2,"0");
+  tEl.textContent=`${m}:${s}`;
+  if(left<=60)tEl.classList.add("danger");
+  if(left<=0){clearInterval(timerInt);alert("시간이 종료되어 자동 제출합니다.");submit();return;}
+  left--;
+}
+tick();timerInt=setInterval(tick,1000);
+</script>
+</body>
+</html>

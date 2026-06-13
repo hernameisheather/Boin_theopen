@@ -154,7 +154,8 @@
   <h2>📋 평가 zone
     <span class="eval-progress-tag">
       {{ eval_done }} / {{ eval_total }}개 완료
-      {% if eval_total < 4 %}<small>(재시험 대상 아님)</small>{% endif %}
+      {% set _m2 = evaluations | selectattr('key', 'equalto', 'midterm_2') | first %}
+      {% if _m2 and not _m2.is_eligible %}<small>(중간평가 재시 대상 아님)</small>{% endif %}
     </span>
   </h2>
   <table class="records vocab-tests">
@@ -175,7 +176,9 @@
       <tr class="vocab-row {% if not e.is_eligible %}eval-not-eligible{% elif e.completed %}vocab-done{% elif e.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
         <td><b>{{ e.label }}</b></td>
         <td>
-          {% if not e.is_eligible %}
+          {% if e.key == 'retake_boin' and not e.completed %}
+          <a href="{{ url_for('retake_exam') }}" style="display:inline-block;background:#2f6df6;color:#fff;padding:6px 12px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px">📝 응시하기</a>
+          {% elif not e.is_eligible %}
           <span class="eval-status-na">— 해당 없음 —</span>
           {% elif e.completed %}
           <span class="vocab-status-done">✅ 응시 완료</span>

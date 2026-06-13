@@ -432,6 +432,7 @@ def compute_review_test_records(student_records):
 
 # ─── 평가 시험 (4개: 중간평가 1·2차, 파이널 1·2차) ────────────
 EVALUATION_TESTS = [
+    {"label": "보신반 재시험 (D6-9)", "key": "retake_boin", "is_retake": False},
     {"label": "중간평가 1차", "key": "midterm_1", "is_retake": False},
     {"label": "중간평가 2차 (재시)", "key": "midterm_2", "is_retake": True,
      "retake_threshold": 38},
@@ -452,6 +453,10 @@ def _record_matches_evaluation(record, key):
     if not cat:
         return False
     cat_norm = cat.replace(" ", "").lower()
+
+    # 보신반 재시험: 항목명 정확 일치만 (다른 평가 키와 충돌 없음)
+    if key == "retake_boin":
+        return cat_norm == RETAKE_EXAM_CATEGORY.replace(" ", "").lower()
 
     # 중간평가 우선 판단
     is_midterm = ("중간평가" in cat_norm or "midterm" in cat_norm)
@@ -528,6 +533,95 @@ def compute_evaluation_status(student_records):
             "eligibility_note": eligibility_note,
         })
     return result
+
+
+# ─── 보신반 재시험 (Day 6-9) — 인포털 응시 + 서버 채점 ─────────
+RETAKE_EXAM_CATEGORY = "보신반 재시험 (D6-9)"
+RETAKE_EXAM_MAX = 50
+RETAKE_MC_POINTS = 3
+
+# 객관식 정답(1-indexed) + 해설 — exam.html 정답키와 동일
+RETAKE_MC_KEY = [
+    {"n": 1, "ans": 1, "exp": "단순 지표는 중요한 목표에 '가까이' 데려갈 수 없다는 흐름. ①closer → no closer/further."},
+    {"n": 2, "ans": 1, "exp": "바로 뒤 'The survivors'는 선택이 일부를 제거했다는 앞 내용이 필요. ①."},
+    {"n": 3, "ans": 2, "exp": "청소년의 변화한 자율성 욕구에 맞게 부모 방식이 조정되어야 한다. ②."},
+    {"n": 4, "ans": 4, "exp": "도덕적 위험 제기 → (B) 취약 사용자 기만 → (A) 만화처럼 제안 → (C) 부연. ④ (B)-(A)-(C)."},
+    {"n": 5, "ans": 5, "exp": "be동사 보어 자리이므로 부사 unconsciously → 형용사 unconscious. ⑤."},
+    {"n": 6, "ans": 4, "exp": "인과를 '설명/규명'하려는 시도가 오히려 흐리게 만든다. ④obscure는 부적절."},
+    {"n": 7, "ans": 5, "exp": "표본추출의 정보 손실을 넘어 전체 데이터를 활용하자는 글. ⑤."},
+    {"n": 8, "ans": 3, "exp": "긍정적 공상은 에너지를 '빼앗는다'는 흐름. ③boost는 부적절."},
+    {"n": 9, "ans": 2, "exp": "유럽 통치자의 무능 vs. 고도로 중앙집권화된 아시아/중동. ②."},
+    {"n": 10, "ans": 3, "exp": "'Popular thinking said ~, yet 인물 ~' 예시의 마지막 항목. ③."},
+    {"n": 11, "ans": 5, "exp": "개도국은 추가 비용 흡수가 '더 어렵다'고 했으므로 '손쉽게 적응'은 불일치. ⑤."},
+]
+
+RETAKE_SA1_ANSWER = ["Shared", "thinking", "tools", "allow", "students", "to",
+                     "link", "different", "academic", "disciplines"]
+RETAKE_SA1_MODEL = "Shared thinking tools allow students to link different academic disciplines."
+RETAKE_SA1_EXP = "공유된 사고 도구(shared thinking tools)가 학생들이 서로 다른 학문 분야를 연결하게 해 준다는 요지."
+RETAKE_SA2_A = "relaxing"
+RETAKE_SA2_B = "acquiring"
+RETAKE_SA2_MODEL = "(A) relaxing  (B) acquiring"
+RETAKE_SA2_EXP = "benefits from + 동명사(relaxing), thereby + 동명사(acquiring)."
+RETAKE_SA3_ANSWER = ["searching", "for", "causal", "explanations", "only", "creates", "more", "confusion"]
+RETAKE_SA3_MODEL = "searching for causal explanations only creates more confusion"
+RETAKE_SA3_EXP = "명확한 상관관계라도 인과를 설명하려 들면 오히려 더 혼란스러워진다는 요지."
+
+
+def _norm_ans(s):
+    """exam.html의 norm과 동일 규칙: 소문자 + 따옴표/마침표/쉼표 제거 + 공백 단일화."""
+    s = (s or "").lower().replace('"', '').replace('.', '').replace(',', '')
+    return " ".join(s.split())
+
+
+def grade_retake(answers):
+    """클라이언트 답안(dict)을 서버에서 채점.
+    answers = {"mc": {"1": 3, ...}, "sa1": [...], "sa2": {"A": "..", "B": ".."}, "sa3": [...]}
+    """
+    answers = answers or {}
+    mc_in = answers.get("mc", {}) or {}
+
+    score = 0
+    mc_right = 0
+    mc_results = []
+    for q in RETAKE_MC_KEY:
+        try:
+            pick = int(mc_in.get(str(q["n"]), 0) or 0)
+        except (ValueError, TypeError):
+            pick = 0
+        ok = pick == q["ans"]
+        if ok:
+            score += RETAKE_MC_POINTS
+            mc_right += 1
+        mc_results.append({"n": q["n"], "pick": pick, "ans": q["ans"], "ok": ok, "exp": q["exp"]})
+
+    sa_results = []
+    got1 = 5 if _norm_ans(" ".join(answers.get("sa1", []))) == _norm_ans(" ".join(RETAKE_SA1_ANSWER)) else 0
+    sa_results.append({"n": "서술형 1", "got": got1, "max": 5, "ok": got1 == 5,
+                       "model": RETAKE_SA1_MODEL, "exp": RETAKE_SA1_EXP})
+
+    sa2 = answers.get("sa2", {}) or {}
+    a_ok = _norm_ans(sa2.get("A", "")) == RETAKE_SA2_A
+    b_ok = _norm_ans(sa2.get("B", "")) == RETAKE_SA2_B
+    got2 = (4 if a_ok else 0) + (4 if b_ok else 0)
+    sa_results.append({"n": "서술형 2", "got": got2, "max": 8, "ok": got2 == 8,
+                       "a_ok": a_ok, "b_ok": b_ok, "model": RETAKE_SA2_MODEL, "exp": RETAKE_SA2_EXP})
+
+    got3 = 4 if _norm_ans(" ".join(answers.get("sa3", []))) == _norm_ans(" ".join(RETAKE_SA3_ANSWER)) else 0
+    sa_results.append({"n": "서술형 3", "got": got3, "max": 4, "ok": got3 == 4,
+                       "model": RETAKE_SA3_MODEL, "exp": RETAKE_SA3_EXP})
+
+    sa_score = got1 + got2 + got3
+    score += sa_score
+    mc_str = f"{mc_right}/{len(RETAKE_MC_KEY)}"
+    sa_str = f"{sa_score}/17"
+    feedback = (f"객관식 {mc_str} · 서술형 {sa_str} "
+                f"(서술형1 {got1}/5·서술형2 {got2}/8·서술형3 {got3}/4)")
+    return {
+        "score": score, "max": RETAKE_EXAM_MAX,
+        "mc_str": mc_str, "sa_str": sa_str, "feedback": feedback,
+        "mc_results": mc_results, "sa_results": sa_results,
+    }
 
 
 def compute_word_test_status(student_records):
@@ -1090,6 +1184,61 @@ def my_page():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+# ─── 라우트: 보신반 재시험 (학생 응시) ───────────────────────
+@app.route("/retake")
+@parent_required
+def retake_exam():
+    code = session["student_code"]
+    data = load_data()
+    student = data["students"].get(code)
+    if not student:
+        session.clear()
+        return redirect(url_for("login"))
+
+    # 이전 응시 기록(있으면 마지막 점수 표시)
+    prev_score = None
+    for r in data["records"]:
+        if (r.get("student_code") == code
+                and r.get("category") == RETAKE_EXAM_CATEGORY):
+            prev_score = r.get("score")
+
+    return render_template(
+        "retake_exam.html",
+        student_name=student["name"],
+        prev_score=prev_score,
+        exam_max=RETAKE_EXAM_MAX,
+    )
+
+
+@app.route("/retake/submit", methods=["POST"])
+@parent_required
+def retake_submit():
+    code = session["student_code"]
+    data = load_data()
+    if code not in data["students"]:
+        return {"error": "unknown student"}, 400
+
+    answers = request.get_json(silent=True) or {}
+    result = grade_retake(answers)
+
+    # 같은 학생의 기존 보신반 재시험 기록 제거 후 1건으로 교체
+    today = datetime.now().strftime("%Y-%m-%d")
+    records = [r for r in data["records"]
+               if not (r.get("student_code") == code
+                       and r.get("category") == RETAKE_EXAM_CATEGORY)]
+    records.append({
+        "date": today,
+        "student_code": code,
+        "category": RETAKE_EXAM_CATEGORY,
+        "score": str(result["score"]),
+        "feedback": result["feedback"],
+        "flag": "",
+        "resolved": False,
+    })
+    save_data(data["students"], records)
+    return result
 
 
 # ─── 라우트: 관리자 ──────────────────────────────────────────
