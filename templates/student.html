@@ -160,11 +160,13 @@
   <table class="records vocab-tests">
     <thead>
       <tr>
-        <th style="width:170px">평가</th>
-        <th style="width:130px">상태</th>
-        <th style="width:80px">점수</th>
-        <th style="width:120px">응시일</th>
-        <th style="width:180px">비고</th>
+        <th style="width:160px">평가</th>
+        <th style="width:120px">상태</th>
+        <th style="width:70px">점수</th>
+        <th style="width:90px">반 평균</th>
+        <th style="width:110px">반 등수</th>
+        <th style="width:110px">응시일</th>
+        <th style="width:160px">비고</th>
         <th>피드백</th>
       </tr>
     </thead>
@@ -184,6 +186,25 @@
           {% endif %}
         </td>
         <td class="score">{{ e.score if e.has_record else '—' }}</td>
+        <td>
+          {% if e.class_avg is not none %}
+            <b>{{ e.class_avg }}</b>점
+            {% if e.numeric_score is not none %}
+              {% set diff = (e.numeric_score - e.class_avg) | round(1) %}
+              {% if diff > 0 %}<small class="diff-up">(+{{ diff }})</small>
+              {% elif diff < 0 %}<small class="diff-down">({{ diff }})</small>{% endif %}
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if e.class_rank %}
+            <span class="rank-badge {% if e.class_rank[0] == 1 %}rank-gold{% elif e.class_rank[0] == 2 %}rank-silver{% elif e.class_rank[0] == 3 %}rank-bronze{% endif %}">
+              {{ e.class_rank[0] }}등 <small>/ {{ e.class_rank[1] }}명</small>
+            </span>
+          {% elif e.class_count > 0 %}
+            <span class="muted small">{{ e.class_count }}명 응시</span>
+          {% else %}—{% endif %}
+        </td>
         <td>{{ e.date or '—' }}</td>
         <td class="muted small">{{ e.eligibility_note or '—' }}</td>
         <td class="feedback">{{ e.feedback or '' }}</td>

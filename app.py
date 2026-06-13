@@ -441,25 +441,36 @@ EVALUATION_TESTS = [
 
 
 def _record_matches_evaluation(record, key):
-    """기록이 특정 평가에 해당하는지 — 항목명으로 판별."""
+    """기록이 특정 평가에 해당하는지 — 항목명으로 판별.
+    '기말대비 중간평가'처럼 두 키워드가 같이 있으면 중간평가가 우선.
+    """
     cat = (record.get("category") or "").strip()
     if not cat:
         return False
     cat_norm = cat.replace(" ", "").lower()
 
-    has_mid = "중간평가" in cat_norm or "midterm" in cat_norm or "중간" in cat_norm
-    has_final = "파이널" in cat_norm or "final" in cat_norm or "기말" in cat_norm
+    # 중간평가 우선 판단: '중간평가' 또는 'midterm' 키워드가 있으면 무조건 미들텀
+    # '중간'만 있는 경우는 '기말대비'가 함께 있지 않을 때만
+    is_midterm = ("중간평가" in cat_norm or "midterm" in cat_norm)
+    if not is_midterm:
+        is_midterm = "중간" in cat_norm and "기말대비" not in cat_norm
+
+    # 파이널/기말은 중간평가가 아닐 때만
+    is_final = False
+    if not is_midterm:
+        is_final = ("파이널" in cat_norm or "final" in cat_norm or "기말" in cat_norm)
+
     has_1 = ("1차" in cat_norm) or ("1회" in cat_norm) or cat_norm.endswith("1")
     has_2 = ("2차" in cat_norm) or ("2회" in cat_norm) or cat_norm.endswith("2") or "재시" in cat_norm
 
     if key == "midterm_1":
-        return has_mid and has_1 and not has_2
+        return is_midterm and has_1 and not has_2
     if key == "midterm_2":
-        return has_mid and has_2
+        return is_midterm and has_2
     if key == "final_1":
-        return has_final and has_1 and not has_2
+        return is_final and has_1 and not has_2
     if key == "final_2":
-        return has_final and has_2
+        return is_final and has_2
     return False
 
 
@@ -998,6 +1009,49 @@ def my_page():
 
     # 평가 시험 4종 (중간평가 2차는 대상자만 카운트)
     evaluations = compute_evaluation_status(items)
+
+    # 각 평가별 반 평균 + 본인 등수 (전체 학생 대상)
+    for ev_info in EVALUATION_TESTS:
+        ev_key = ev_info["key"]
+        # 해당 평가에 응시한 학생들의 최고점 수집
+        student_best = {}
+        for r in data["records"]:
+            if not _record_matches_evaluation(r, ev_key):
+                continue
+            sc = _parse_score(r.get("score", ""))
+            if sc is None:
+                continue
+            sc_code = r["student_code"]
+            if sc_code not in student_best or sc > student_best[sc_code]:
+                student_best[sc_code] = sc
+
+        # 평균 + 본인 등수 계산
+        class_avg = None
+        class_count = 0
+        class_rank = None
+        if student_best:
+            class_avg = round(sum(student_best.values()) / len(student_best), 1)
+            class_count = len(student_best)
+            if code in student_best:
+                sorted_entries = sorted(student_best.items(), key=lambda x: -x[1])
+                prev_score = None
+                current_rank = 0
+                for i, (sc_code, sc) in enumerate(sorted_entries):
+                    if sc != prev_score:
+                        current_rank = i + 1
+                        prev_score = sc
+                    if sc_code == code:
+                        class_rank = (current_rank, len(student_best))
+                        break
+
+        # 해당 평가 entry에 정보 부착
+        for e in evaluations:
+            if e["key"] == ev_key:
+                e["class_avg"] = class_avg
+                e["class_count"] = class_count
+                e["class_rank"] = class_rank
+                break
+
     eval_eligible = [e for e in evaluations if e["is_eligible"]]
     eval_done = sum(1 for e in eval_eligible if e["completed"])
     eval_total = len(eval_eligible)
