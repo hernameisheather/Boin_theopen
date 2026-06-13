@@ -393,53 +393,40 @@ def _is_word_test_completed(score):
     return True
 
 
-# ─── Review test (회차별) ────────────────────────────────────
-REVIEW_TEST_ROUNDS = [
-    {"label": "1회차", "range": "16-20"},
-    {"label": "2회차", "range": "21-23"},
-    {"label": "3회차", "range": "24-26"},
-    {"label": "4회차", "range": "27-28"},
-    {"label": "5회차", "range": "29-30"},
-]
+# ─── Review test (항목명 기반) ───────────────────────────────
+def compute_review_test_records(student_records):
+    """Review test 관련 기록을 시험명(항목명)별로 그룹핑.
+    매칭: 항목명에 'review' 또는 '리뷰' 포함.
+    같은 항목명에 여러 기록이 있으면 가장 최근 날짜 기록만 사용.
+    """
+    by_cat = {}
+    for r in student_records:
+        cat = (r.get("category") or "").strip()
+        if not cat:
+            continue
+        cat_lower = cat.lower()
+        if "review" not in cat_lower and "리뷰" not in cat_lower:
+            continue
+        date = r.get("date") or ""
+        if cat not in by_cat or date > (by_cat[cat].get("date") or ""):
+            by_cat[cat] = r
 
-
-def _record_matches_review_round(record, range_str):
-    """Review test 회차 매칭: review/리뷰 키워드 + range 포함."""
-    cat = (record.get("category") or "").strip()
-    fb = (record.get("feedback") or "").strip()
-    if not cat and not fb:
-        return False
-    range_norm = range_str.replace(" ", "")
-    cat_norm = cat.replace(" ", "")
-    fb_norm = fb.replace(" ", "")
-    has_range = (range_norm in cat_norm) or (range_norm in fb_norm)
-    if not has_range:
-        return False
-    full_lower = (cat + " " + fb).lower()
-    return ("review" in full_lower) or ("리뷰" in full_lower)
-
-
-def compute_review_test_status(student_records):
     result = []
-    for round_info in REVIEW_TEST_ROUNDS:
-        matching = [r for r in student_records
-                    if _record_matches_review_round(r, round_info["range"])]
-        matching.sort(key=lambda r: r.get("date", ""), reverse=True)
-        latest = matching[0] if matching else None
-        score_text = latest.get("score", "") if latest else None
-        numeric_score = _parse_score(score_text) if score_text else None
-        has_record = latest is not None
-        completed = has_record and _is_word_test_completed(score_text)
+    for cat, r in by_cat.items():
+        score_text = r.get("score", "")
+        numeric_score = _parse_score(score_text)
+        completed = _is_word_test_completed(score_text)
         result.append({
-            "label": round_info["label"],
-            "range": round_info["range"],
-            "has_record": has_record,
+            "test_name": cat,
+            "has_record": True,
             "completed": completed,
             "score": score_text,
             "numeric_score": numeric_score,
-            "date": latest.get("date") if latest else None,
-            "feedback": latest.get("feedback") if latest else None,
+            "date": r.get("date") or "",
+            "feedback": r.get("feedback") or "",
         })
+    # 날짜 내림차순(최신이 위에) 정렬
+    result.sort(key=lambda x: (x["date"] or ""), reverse=True)
     return result
 
 
@@ -1004,10 +991,10 @@ def my_page():
     word_tests_done = sum(1 for t in word_tests if t["completed"])
     word_tests_total = len(word_tests)
 
-    # Review test 회차별 상태
-    review_tests = compute_review_test_status(items)
-    review_tests_done = sum(1 for t in review_tests if t["completed"])
-    review_tests_total = len(review_tests)
+    # Review test (항목명 기반) — 'review'/'리뷰'가 포함된 모든 항목
+    review_records = compute_review_test_records(items)
+    review_done = sum(1 for r in review_records if r["completed"])
+    review_total = len(review_records)
 
     # 평가 시험 4종 (중간평가 2차는 대상자만 카운트)
     evaluations = compute_evaluation_status(items)
@@ -1031,9 +1018,9 @@ def my_page():
         word_tests=word_tests,
         word_tests_done=word_tests_done,
         word_tests_total=word_tests_total,
-        review_tests=review_tests,
-        review_tests_done=review_tests_done,
-        review_tests_total=review_tests_total,
+        review_records=review_records,
+        review_done=review_done,
+        review_total=review_total,
         evaluations=evaluations,
         eval_done=eval_done,
         eval_total=eval_total,

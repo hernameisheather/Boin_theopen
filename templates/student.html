@@ -105,54 +105,47 @@
   {% endif %}
 </section>
 
-<!-- ─── Review Test 완료율 zone ─────────────────────── -->
+<!-- ─── Review Test zone (항목명 기반) ─────────────────── -->
 <section class="card review-zone-card">
-  <h2>🔄 Review Test 완료율 zone
+  <h2>🔄 Review Test zone
+    {% if review_total > 0 %}
     <span class="review-progress-tag">
-      {{ review_tests_done }} / {{ review_tests_total }}회 완료
-      ({{ ((review_tests_done / review_tests_total) * 100) | round | int }}%)
+      {{ review_done }} / {{ review_total }}건 완료
+      ({{ ((review_done / review_total) * 100) | round | int }}%)
     </span>
+    {% endif %}
   </h2>
+  {% if not review_records %}
+  <p class="muted">아직 등록된 Review test 기록이 없습니다. 항목명에 'Review' 또는 '리뷰'가 포함되면 자동으로 여기에 표시됩니다.</p>
+  {% else %}
   <table class="records vocab-tests">
     <thead>
       <tr>
-        <th style="width:80px">회차</th>
-        <th style="width:90px">범위</th>
-        <th style="width:110px">상태</th>
+        <th>시험명</th>
+        <th style="width:120px">상태</th>
         <th style="width:90px">점수</th>
-        <th style="width:120px">최근 응시일</th>
+        <th style="width:120px">응시일</th>
         <th>피드백</th>
       </tr>
     </thead>
     <tbody>
-      {% for t in review_tests %}
-      <tr class="vocab-row {% if t.completed %}vocab-done{% elif t.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
-        <td><b>{{ t.label }}</b></td>
-        <td><code class="vocab-range">{{ t.range }}</code></td>
+      {% for r in review_records %}
+      <tr class="vocab-row {% if r.completed %}vocab-done{% else %}vocab-incomplete{% endif %}">
+        <td><b>{{ r.test_name }}</b></td>
         <td>
-          {% if t.completed %}
+          {% if r.completed %}
           <span class="vocab-status-done">✅ 응시 완료</span>
-          {% elif t.has_record %}
-          <span class="vocab-status-incomplete">📝 응시 미완료</span>
           {% else %}
-          <span class="vocab-status-pending">⏳ 미응시</span>
+          <span class="vocab-status-incomplete">📝 응시 미완료</span>
           {% endif %}
         </td>
-        <td class="score">{{ t.score if t.has_record else '—' }}</td>
-        <td>{{ t.date or '—' }}</td>
-        <td class="feedback">{{ t.feedback or '' }}</td>
+        <td class="score">{{ r.score or '—' }}</td>
+        <td>{{ r.date or '—' }}</td>
+        <td class="feedback">{{ r.feedback or '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  {% if review_tests_done == review_tests_total %}
-  <p class="vocab-summary all-done">🎉 Review test 모든 회차 완료!</p>
-  {% else %}
-  <p class="vocab-summary">남은 회차:
-    {% for t in review_tests if not t.completed %}
-      <span class="vocab-pending-badge">{{ t.label }} ({{ t.range }})</span>
-    {% endfor %}
-  </p>
   {% endif %}
 </section>
 
