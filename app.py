@@ -442,15 +442,18 @@ EVALUATION_TESTS = [
 
 def _record_matches_evaluation(record, key):
     """기록이 특정 평가에 해당하는지 — 항목명으로 판별.
-    '기말대비 중간평가'처럼 두 키워드가 같이 있으면 중간평가가 우선.
+    규칙:
+      - '중간평가'(또는 'midterm') 키워드 있음 → 중간평가
+      - 그게 아니고 '파이널'/'final'/'기말' 키워드 있음 → 파이널
+      - '2차'/'재시' 명시 있으면 → 2차, 없으면 기본적으로 1차로 분류
+      - '기말대비 중간평가'는 중간평가가 우선
     """
     cat = (record.get("category") or "").strip()
     if not cat:
         return False
     cat_norm = cat.replace(" ", "").lower()
 
-    # 중간평가 우선 판단: '중간평가' 또는 'midterm' 키워드가 있으면 무조건 미들텀
-    # '중간'만 있는 경우는 '기말대비'가 함께 있지 않을 때만
+    # 중간평가 우선 판단
     is_midterm = ("중간평가" in cat_norm or "midterm" in cat_norm)
     if not is_midterm:
         is_midterm = "중간" in cat_norm and "기말대비" not in cat_norm
@@ -460,17 +463,17 @@ def _record_matches_evaluation(record, key):
     if not is_midterm:
         is_final = ("파이널" in cat_norm or "final" in cat_norm or "기말" in cat_norm)
 
-    has_1 = ("1차" in cat_norm) or ("1회" in cat_norm) or cat_norm.endswith("1")
-    has_2 = ("2차" in cat_norm) or ("2회" in cat_norm) or cat_norm.endswith("2") or "재시" in cat_norm
+    # 2차 명시 표시 (없으면 1차로 기본 분류)
+    is_2nd = ("2차" in cat_norm) or ("2회" in cat_norm) or ("재시" in cat_norm)
 
     if key == "midterm_1":
-        return is_midterm and has_1 and not has_2
+        return is_midterm and not is_2nd
     if key == "midterm_2":
-        return is_midterm and has_2
+        return is_midterm and is_2nd
     if key == "final_1":
-        return is_final and has_1 and not has_2
+        return is_final and not is_2nd
     if key == "final_2":
-        return is_final and has_2
+        return is_final and is_2nd
     return False
 
 
