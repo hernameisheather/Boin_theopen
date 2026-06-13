@@ -105,6 +105,101 @@
   {% endif %}
 </section>
 
+<!-- ─── Review Test 완료율 zone ─────────────────────── -->
+<section class="card review-zone-card">
+  <h2>🔄 Review Test 완료율 zone
+    <span class="review-progress-tag">
+      {{ review_tests_done }} / {{ review_tests_total }}회 완료
+      ({{ ((review_tests_done / review_tests_total) * 100) | round | int }}%)
+    </span>
+  </h2>
+  <table class="records vocab-tests">
+    <thead>
+      <tr>
+        <th style="width:80px">회차</th>
+        <th style="width:90px">범위</th>
+        <th style="width:110px">상태</th>
+        <th style="width:90px">점수</th>
+        <th style="width:120px">최근 응시일</th>
+        <th>피드백</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in review_tests %}
+      <tr class="vocab-row {% if t.completed %}vocab-done{% elif t.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
+        <td><b>{{ t.label }}</b></td>
+        <td><code class="vocab-range">{{ t.range }}</code></td>
+        <td>
+          {% if t.completed %}
+          <span class="vocab-status-done">✅ 응시 완료</span>
+          {% elif t.has_record %}
+          <span class="vocab-status-incomplete">📝 응시 미완료</span>
+          {% else %}
+          <span class="vocab-status-pending">⏳ 미응시</span>
+          {% endif %}
+        </td>
+        <td class="score">{{ t.score if t.has_record else '—' }}</td>
+        <td>{{ t.date or '—' }}</td>
+        <td class="feedback">{{ t.feedback or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if review_tests_done == review_tests_total %}
+  <p class="vocab-summary all-done">🎉 Review test 모든 회차 완료!</p>
+  {% else %}
+  <p class="vocab-summary">남은 회차:
+    {% for t in review_tests if not t.completed %}
+      <span class="vocab-pending-badge">{{ t.label }} ({{ t.range }})</span>
+    {% endfor %}
+  </p>
+  {% endif %}
+</section>
+
+<!-- ─── 평가 zone (중간평가 / 파이널) ──────────────────── -->
+<section class="card eval-zone-card">
+  <h2>📋 평가 zone
+    <span class="eval-progress-tag">
+      {{ eval_done }} / {{ eval_total }}개 완료
+      {% if eval_total < 4 %}<small>(재시험 대상 아님)</small>{% endif %}
+    </span>
+  </h2>
+  <table class="records vocab-tests">
+    <thead>
+      <tr>
+        <th style="width:170px">평가</th>
+        <th style="width:130px">상태</th>
+        <th style="width:80px">점수</th>
+        <th style="width:120px">응시일</th>
+        <th style="width:180px">비고</th>
+        <th>피드백</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in evaluations %}
+      <tr class="vocab-row {% if not e.is_eligible %}eval-not-eligible{% elif e.completed %}vocab-done{% elif e.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
+        <td><b>{{ e.label }}</b></td>
+        <td>
+          {% if not e.is_eligible %}
+          <span class="eval-status-na">— 해당 없음 —</span>
+          {% elif e.completed %}
+          <span class="vocab-status-done">✅ 응시 완료</span>
+          {% elif e.has_record %}
+          <span class="vocab-status-incomplete">📝 응시 미완료</span>
+          {% else %}
+          <span class="vocab-status-pending">⏳ 미응시</span>
+          {% endif %}
+        </td>
+        <td class="score">{{ e.score if e.has_record else '—' }}</td>
+        <td>{{ e.date or '—' }}</td>
+        <td class="muted small">{{ e.eligibility_note or '—' }}</td>
+        <td class="feedback">{{ e.feedback or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
 {% if messages %}
 <section class="card message-card">
   <h2>💬 신쌤의 한마디</h2>

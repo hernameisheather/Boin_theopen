@@ -393,6 +393,142 @@ def _is_word_test_completed(score):
     return True
 
 
+# ─── Review test (회차별) ────────────────────────────────────
+REVIEW_TEST_ROUNDS = [
+    {"label": "1회차", "range": "16-20"},
+    {"label": "2회차", "range": "21-23"},
+    {"label": "3회차", "range": "24-26"},
+    {"label": "4회차", "range": "27-28"},
+    {"label": "5회차", "range": "29-30"},
+]
+
+
+def _record_matches_review_round(record, range_str):
+    """Review test 회차 매칭: review/리뷰 키워드 + range 포함."""
+    cat = (record.get("category") or "").strip()
+    fb = (record.get("feedback") or "").strip()
+    if not cat and not fb:
+        return False
+    range_norm = range_str.replace(" ", "")
+    cat_norm = cat.replace(" ", "")
+    fb_norm = fb.replace(" ", "")
+    has_range = (range_norm in cat_norm) or (range_norm in fb_norm)
+    if not has_range:
+        return False
+    full_lower = (cat + " " + fb).lower()
+    return ("review" in full_lower) or ("리뷰" in full_lower)
+
+
+def compute_review_test_status(student_records):
+    result = []
+    for round_info in REVIEW_TEST_ROUNDS:
+        matching = [r for r in student_records
+                    if _record_matches_review_round(r, round_info["range"])]
+        matching.sort(key=lambda r: r.get("date", ""), reverse=True)
+        latest = matching[0] if matching else None
+        score_text = latest.get("score", "") if latest else None
+        numeric_score = _parse_score(score_text) if score_text else None
+        has_record = latest is not None
+        completed = has_record and _is_word_test_completed(score_text)
+        result.append({
+            "label": round_info["label"],
+            "range": round_info["range"],
+            "has_record": has_record,
+            "completed": completed,
+            "score": score_text,
+            "numeric_score": numeric_score,
+            "date": latest.get("date") if latest else None,
+            "feedback": latest.get("feedback") if latest else None,
+        })
+    return result
+
+
+# ─── 평가 시험 (4개: 중간평가 1·2차, 파이널 1·2차) ────────────
+EVALUATION_TESTS = [
+    {"label": "중간평가 1차", "key": "midterm_1", "is_retake": False},
+    {"label": "중간평가 2차 (재시)", "key": "midterm_2", "is_retake": True,
+     "retake_threshold": 38},
+    {"label": "파이널 1차", "key": "final_1", "is_retake": False},
+    {"label": "파이널 2차", "key": "final_2", "is_retake": False},
+]
+
+
+def _record_matches_evaluation(record, key):
+    """기록이 특정 평가에 해당하는지 — 항목명으로 판별."""
+    cat = (record.get("category") or "").strip()
+    if not cat:
+        return False
+    cat_norm = cat.replace(" ", "").lower()
+
+    has_mid = "중간평가" in cat_norm or "midterm" in cat_norm or "중간" in cat_norm
+    has_final = "파이널" in cat_norm or "final" in cat_norm or "기말" in cat_norm
+    has_1 = ("1차" in cat_norm) or ("1회" in cat_norm) or cat_norm.endswith("1")
+    has_2 = ("2차" in cat_norm) or ("2회" in cat_norm) or cat_norm.endswith("2") or "재시" in cat_norm
+
+    if key == "midterm_1":
+        return has_mid and has_1 and not has_2
+    if key == "midterm_2":
+        return has_mid and has_2
+    if key == "final_1":
+        return has_final and has_1 and not has_2
+    if key == "final_2":
+        return has_final and has_2
+    return False
+
+
+def compute_evaluation_status(student_records):
+    """평가 4개 상태. 중간평가 2차는 1차 ≤38인 경우만 응시 대상."""
+    # 1차 점수 먼저 산출
+    mid1_matches = sorted(
+        [r for r in student_records if _record_matches_evaluation(r, "midterm_1")],
+        key=lambda r: r.get("date", ""), reverse=True
+    )
+    mid1_latest = mid1_matches[0] if mid1_matches else None
+    mid1_score = _parse_score(mid1_latest.get("score", "")) if mid1_latest else None
+
+    result = []
+    for ev in EVALUATION_TESTS:
+        key = ev["key"]
+        matching = sorted(
+            [r for r in student_records if _record_matches_evaluation(r, key)],
+            key=lambda r: r.get("date", ""), reverse=True
+        )
+        latest = matching[0] if matching else None
+        score_text = latest.get("score", "") if latest else None
+        numeric_score = _parse_score(score_text) if score_text else None
+        has_record = latest is not None
+        completed = has_record and _is_word_test_completed(score_text)
+
+        # 재시험(중간평가 2차) 대상 여부 판단
+        is_eligible = True
+        eligibility_note = None
+        if ev.get("is_retake"):
+            threshold = ev.get("retake_threshold", 38)
+            if mid1_score is None:
+                is_eligible = False
+                eligibility_note = "중간평가 1차 미응시"
+            elif mid1_score > threshold:
+                is_eligible = False
+                eligibility_note = f"재시험 대상 아님 (1차 {int(mid1_score) if mid1_score == int(mid1_score) else mid1_score}점)"
+            else:
+                eligibility_note = f"재시험 대상 (1차 {int(mid1_score) if mid1_score == int(mid1_score) else mid1_score}점 ≤ {threshold})"
+
+        result.append({
+            "label": ev["label"],
+            "key": key,
+            "is_retake": ev.get("is_retake", False),
+            "has_record": has_record,
+            "completed": completed,
+            "score": score_text,
+            "numeric_score": numeric_score,
+            "date": latest.get("date") if latest else None,
+            "feedback": latest.get("feedback") if latest else None,
+            "is_eligible": is_eligible,
+            "eligibility_note": eligibility_note,
+        })
+    return result
+
+
 def compute_word_test_status(student_records):
     """특정 학생의 기록에서 단어시험 회차별 상태 계산.
     같은 회차에 여러 기록이 있으면 가장 최근 날짜 기록을 사용.
@@ -868,6 +1004,17 @@ def my_page():
     word_tests_done = sum(1 for t in word_tests if t["completed"])
     word_tests_total = len(word_tests)
 
+    # Review test 회차별 상태
+    review_tests = compute_review_test_status(items)
+    review_tests_done = sum(1 for t in review_tests if t["completed"])
+    review_tests_total = len(review_tests)
+
+    # 평가 시험 4종 (중간평가 2차는 대상자만 카운트)
+    evaluations = compute_evaluation_status(items)
+    eval_eligible = [e for e in evaluations if e["is_eligible"]]
+    eval_done = sum(1 for e in eval_eligible if e["completed"])
+    eval_total = len(eval_eligible)
+
     return render_template(
         "student.html",
         student=student,
@@ -884,6 +1031,12 @@ def my_page():
         word_tests=word_tests,
         word_tests_done=word_tests_done,
         word_tests_total=word_tests_total,
+        review_tests=review_tests,
+        review_tests_done=review_tests_done,
+        review_tests_total=review_tests_total,
+        evaluations=evaluations,
+        eval_done=eval_done,
+        eval_total=eval_total,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 

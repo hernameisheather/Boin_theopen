@@ -612,6 +612,76 @@ pre {
   font-weight: 600;
 }
 
+/* ─── Review Test 완료율 zone ─────────────────────────── */
+.review-zone-card {
+  background: linear-gradient(135deg, #f0fdf4 0%, #bbf7d0 100%);
+  border: 1px solid #4ade80;
+}
+.review-zone-card h2 {
+  color: #166534;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.review-zone-card .vocab-tests th { background: #dcfce7; color: #166534; }
+.review-zone-card .vocab-range { background: #dcfce7; color: #166534; }
+.review-progress-tag {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: white;
+  color: #166534;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid #4ade80;
+}
+
+/* ─── 평가 zone (중간평가 / 파이널) ──────────────────── */
+.eval-zone-card {
+  background: linear-gradient(135deg, #fdf4ff 0%, #f5d0fe 100%);
+  border: 1px solid #d946ef;
+}
+.eval-zone-card h2 {
+  color: #86198f;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.eval-zone-card .vocab-tests th { background: #fae8ff; color: #86198f; }
+.eval-progress-tag {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: white;
+  color: #86198f;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid #d946ef;
+}
+.eval-progress-tag small {
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.eval-status-na {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: 500;
+}
+.vocab-row.eval-not-eligible td {
+  background: rgba(156, 163, 175, 0.05);
+  color: var(--muted);
+}
+.vocab-row.eval-not-eligible .feedback,
+.vocab-row.eval-not-eligible td:first-child b { opacity: 0.7; }
+
 /* ─── 클리닉 스케줄러 상태 ────────────────────────────── */
 .status-on {
   display: inline-block;
