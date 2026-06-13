@@ -1011,6 +1011,7 @@ def my_page():
     evaluations = compute_evaluation_status(items)
 
     # 각 평가별 반 평균 + 본인 등수 (전체 학생 대상)
+    # 주의: 위에서 만든 class_avg(카테고리별 dict)와 이름 충돌하지 않도록 별도 변수명 사용
     for ev_info in EVALUATION_TESTS:
         ev_key = ev_info["key"]
         # 해당 평가에 응시한 학생들의 최고점 수집
@@ -1025,13 +1026,13 @@ def my_page():
             if sc_code not in student_best or sc > student_best[sc_code]:
                 student_best[sc_code] = sc
 
-        # 평균 + 본인 등수 계산
-        class_avg = None
-        class_count = 0
-        class_rank = None
+        # 평균 + 본인 등수 계산 (다른 변수명으로!)
+        ev_avg = None
+        ev_count = 0
+        ev_rank = None
         if student_best:
-            class_avg = round(sum(student_best.values()) / len(student_best), 1)
-            class_count = len(student_best)
+            ev_avg = round(sum(student_best.values()) / len(student_best), 1)
+            ev_count = len(student_best)
             if code in student_best:
                 sorted_entries = sorted(student_best.items(), key=lambda x: -x[1])
                 prev_score = None
@@ -1041,15 +1042,15 @@ def my_page():
                         current_rank = i + 1
                         prev_score = sc
                     if sc_code == code:
-                        class_rank = (current_rank, len(student_best))
+                        ev_rank = (current_rank, len(student_best))
                         break
 
         # 해당 평가 entry에 정보 부착
         for e in evaluations:
             if e["key"] == ev_key:
-                e["class_avg"] = class_avg
-                e["class_count"] = class_count
-                e["class_rank"] = class_rank
+                e["class_avg"] = ev_avg
+                e["class_count"] = ev_count
+                e["class_rank"] = ev_rank
                 break
 
     eval_eligible = [e for e in evaluations if e["is_eligible"]]
