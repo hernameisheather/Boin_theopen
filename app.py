@@ -539,6 +539,27 @@ def compute_evaluation_status(student_records):
 RETAKE_EXAM_CATEGORY = "보신반 재시험 (D6-9)"
 RETAKE_EXAM_MAX = 50
 RETAKE_MC_POINTS = 3
+# 결과를 구글 시트(Apps Script 웹앱)로도 전송 — 비우면 전송 안 함
+RETAKE_GSHEET_ENDPOINT = os.environ.get(
+    "RETAKE_GSHEET_ENDPOINT",
+    "https://script.google.com/macros/s/AKfycby6ZylRrCS5r0PsHHbf4pBlij3i8bbqCEUDFk-sqhtD7EOLc2C5ICWFdR5XmELaXrMV/exec",
+)
+_RETAKE_CIRCLED = {0: "-", 1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤"}
+
+
+def _forward_to_gsheet(payload):
+    """결과를 구글 Apps Script 시트로 best-effort 전송 (실패해도 응시에는 영향 없음)."""
+    if not RETAKE_GSHEET_ENDPOINT:
+        return
+    import json as _json
+    import urllib.request as _urlreq
+    try:
+        body = _json.dumps(payload).encode("utf-8")
+        req = _urlreq.Request(RETAKE_GSHEET_ENDPOINT, data=body,
+                              headers={"Content-Type": "application/json"})
+        _urlreq.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"[WARN] gsheet forward failed: {e}")
 
 # 객관식 정답(1-indexed) + 해설 — exam.html 정답키와 동일
 RETAKE_MC_KEY = [
@@ -617,9 +638,12 @@ def grade_retake(answers):
     sa_str = f"{sa_score}/17"
     feedback = (f"객관식 {mc_str} · 서술형 {sa_str} "
                 f"(서술형1 {got1}/5·서술형2 {got2}/8·서술형3 {got3}/4)")
+    mc_detail = " | ".join(f"{m['n']}:{_RETAKE_CIRCLED.get(m['pick'], '-')}" for m in mc_results)
+    sa_detail = " | ".join(f"{s['n']}:{s['got']}/{s['max']}" for s in sa_results)
+    detail = f"{mc_detail} | {sa_detail}"
     return {
         "score": score, "max": RETAKE_EXAM_MAX,
-        "mc_str": mc_str, "sa_str": sa_str, "feedback": feedback,
+        "mc_str": mc_str, "sa_str": sa_str, "feedback": feedback, "detail": detail,
         "mc_results": mc_results, "sa_results": sa_results,
     }
 
@@ -1238,7 +1262,44 @@ def retake_submit():
         "resolved": False,
     })
     save_data(data["students"], records)
+
+    # 구글 시트로도 전송 (백그라운드 — 실패해도 응시·저장에는 영향 없음)
+    if RETAKE_GSHEET_ENDPOINT:
+        import threading
+        stamp = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y. %m. %d. %H:%M:%S")
+        payload = {
+            "exam": "보신반 재시험 D6-D9",
+            "name": data["students"][code]["name"],
+            "score": result["score"], "max": result["max"],
+            "mc": result["mc_str"], "sa": result["sa_str"],
+            "time": stamp, "detail": result["detail"],
+        }
+        threading.Thread(target=_forward_to_gsheet, args=(payload,), daemon=True).start()
+
     return result
+
+
+@app.route("/admin/retake/backfill-google")
+@admin_required
+def retake_backfill_google():
+    """이미 저장된 보신반 재시험 기록을 구글 시트로 일괄 전송 (한 번만 사용)."""
+    data = load_data()
+    sent = 0
+    for r in data["records"]:
+        if r.get("category") != RETAKE_EXAM_CATEGORY:
+            continue
+        name = data["students"].get(r.get("student_code"), {}).get("name", r.get("student_code", ""))
+        _forward_to_gsheet({
+            "exam": "보신반 재시험 D6-D9 (기존기록)",
+            "name": name,
+            "score": r.get("score", ""), "max": RETAKE_EXAM_MAX,
+            "mc": "", "sa": "",
+            "time": r.get("date", ""),
+            "detail": r.get("feedback", ""),
+        })
+        sent += 1
+    flash(f"기존 재시험 결과 {sent}건을 구글 시트로 전송했습니다. (중복 방지를 위해 한 번만 실행하세요)", "success")
+    return redirect(url_for("admin"))
 
 
 # ─── 라우트: 관리자 ──────────────────────────────────────────
