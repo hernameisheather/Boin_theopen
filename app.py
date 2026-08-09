@@ -692,15 +692,35 @@ CLINIC_TIPS = [
     "[학습 포인트] 관계대명사절 — 선행사부터 다시 짚어가며 정확히 해석.",
     "[학습 포인트] 도치·강조 구문 — 평서문으로 재배열 후 의미 확인.",
 ]
-CLINIC_STUDENTS_BY_WEEKDAY = {
-    1: ["정주원", "유한선"],                          # 화요일 클리닉
-    3: ["박서원", "장우영", "오우진", "이성우"],       # 목요일 클리닉 (이성우 추가)
-    5: ["박도환"],                                    # 토요일 클리닉
+# 요일별 정기 클리닉 명단 — 코드에 하드코딩하지 않고 파일에 저장(관리자 화면에서 편집).
+# 자동 업로드(스케줄러)는 제거됨. 이 명단은 "이 명단으로 한 번에 추가" 편의 기능에만 사용.
+CLINIC_ROSTER_FILE = os.path.join(DATA_DIR, "clinic_roster.json")
+CLINIC_WEEKDAYS = [(1, "화요일"), (3, "목요일"), (5, "토요일")]
+_CLINIC_ROSTER_SEED = {
+    "1": ["정주원", "유한선"],
+    "3": ["박서원", "장우영", "오우진", "이성우"],
+    "5": ["박도환"],
 }
-_BOOTSTRAP_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v1.json")
-_BOOTSTRAP_V2_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v2_sat.json")
-_BOOTSTRAP_V3_THU_MARKER = os.path.join(DATA_DIR, ".clinic_bootstrap_v3_thu.json")
-_CLEANUP_FUTURE_MARKER = os.path.join(DATA_DIR, ".clinic_cleanup_future_v1.json")
+
+
+def load_clinic_roster():
+    """요일(str)→학생이름 리스트. 파일 없으면 시드값으로 생성."""
+    import json
+    if os.path.exists(CLINIC_ROSTER_FILE):
+        try:
+            with open(CLINIC_ROSTER_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {str(k): list(v) for k, v in data.items()}
+        except Exception as e:
+            print(f"[WARN] clinic roster load failed: {e}")
+    return {k: list(v) for k, v in _CLINIC_ROSTER_SEED.items()}
+
+
+def save_clinic_roster(roster):
+    import json
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(CLINIC_ROSTER_FILE, "w", encoding="utf-8") as f:
+        json.dump({str(k): list(v) for k, v in roster.items()}, f, ensure_ascii=False, indent=2)
 
 
 def _find_or_create_clinic_student(name, students):
@@ -720,52 +740,69 @@ def _find_or_create_clinic_student(name, students):
     return new_code
 
 
-def add_clinic_records(clinic_date_str, student_names, extras_by_name=None):
-    """클리닉 기록을 추가/업데이트.
-    - 기존 기록 없으면 새로 추가
-    - 기존 기록 있으면: extra가 있으면 [추가] 행으로 누적, 없으면 건너뜀
+def _resolve_names_to_codes(names):
+    """학생 이름 리스트를 코드 리스트로. 없는 이름은 CLI 코드로 생성(저장)."""
+    data = load_data()
+    students = dict(data["students"])
+    codes = []
+    created = False
+    before = set(students.keys())
+    for n in names:
+        n = (n or "").strip()
+        if not n:
+            continue
+        code = _find_or_create_clinic_student(n, students)
+        codes.append(code)
+    if set(students.keys()) != before:
+        created = True
+    if created:
+        save_data(students, list(data["records"]))
+    return codes
+
+
+def add_clinic_records(clinic_date_str, student_codes, auto_feedback=True, note="", per_code_note=None):
+    """클리닉 기록을 코드 기준으로 추가/업데이트.
+    - auto_feedback=True: 표준 문구 + 학습 포인트 자동 생성
+    - auto_feedback=False: note(직접 입력) 를 피드백으로 사용
+    - 같은 날짜·학생 기록이 이미 있으면: note 있으면 [추가]로 누적, 없으면 건너뜀
     반환: (added, updated, skipped) 학생명 리스트
     """
-    extras_by_name = extras_by_name or {}
+    per_code_note = per_code_note or {}
     data = load_data()
     students = dict(data["students"])
     records = list(data["records"])
 
-    # 기존 클리닉 기록을 (날짜, 학생코드) → records 인덱스로 매핑
     existing_idx = {}
     for i, r in enumerate(records):
         if (r.get("date") == clinic_date_str
                 and r.get("category") == CLINIC_CATEGORY):
             existing_idx[r.get("student_code")] = i
 
-    added_names = []
-    updated_names = []
-    skipped_names = []
+    added_names, updated_names, skipped_names = [], [], []
 
-    for name in student_names:
-        code = _find_or_create_clinic_student(name, students)
-        extra = (extras_by_name.get(name, "") or "").strip()
+    for code in student_codes:
+        name = students.get(code, {}).get("name", code)
+        extra = (per_code_note.get(code, "") or note or "").strip()
 
         if code in existing_idx:
-            # 이미 존재 — extra 있으면 추가, 없으면 건너뜀
             if extra:
                 idx = existing_idx[code]
                 cur_fb = records[idx].get("feedback", "")
                 line = f"[추가] {extra}"
                 if line not in cur_fb:
-                    new_fb = cur_fb.rstrip() + ("\n" if cur_fb else "") + line
-                    records[idx]["feedback"] = new_fb
+                    records[idx]["feedback"] = cur_fb.rstrip() + ("\n" if cur_fb else "") + line
                     updated_names.append(name)
                 else:
                     skipped_names.append(name)
             else:
                 skipped_names.append(name)
         else:
-            # 신규 기록
-            tip = random.choice(CLINIC_TIPS)
-            feedback = f"{CLINIC_BASE_FEEDBACK} {tip}"
-            if extra:
-                feedback += f"\n[추가] {extra}"
+            if auto_feedback:
+                feedback = f"{CLINIC_BASE_FEEDBACK} {random.choice(CLINIC_TIPS)}"
+                if extra:
+                    feedback += f"\n[추가] {extra}"
+            else:
+                feedback = extra or "주간 클리닉 진행."
             records.append({
                 "date": clinic_date_str,
                 "student_code": code,
@@ -798,138 +835,8 @@ def _last_weekday_date(weekday_num):
     return target.strftime("%Y-%m-%d")
 
 
-def scheduled_tuesday_clinic():
-    date_str = _last_weekday_date(1)
-    add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[1])
-
-
-def scheduled_thursday_clinic():
-    date_str = _last_weekday_date(3)
-    add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[3])
-
-
-def scheduled_saturday_clinic():
-    date_str = _last_weekday_date(5)
-    add_clinic_records(date_str, CLINIC_STUDENTS_BY_WEEKDAY[5])
-
-
-_scheduler_started = False
-
-def start_clinic_scheduler():
-    """APScheduler를 한 번만 시작."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
-    try:
-        from apscheduler.schedulers.background import BackgroundScheduler
-        from apscheduler.triggers.cron import CronTrigger
-        sched = BackgroundScheduler(timezone="Asia/Seoul")
-        sched.add_job(scheduled_tuesday_clinic,
-                      CronTrigger(day_of_week="tue", hour=23, minute=30),
-                      id="tue_clinic", replace_existing=True)
-        sched.add_job(scheduled_thursday_clinic,
-                      CronTrigger(day_of_week="thu", hour=23, minute=30),
-                      id="thu_clinic", replace_existing=True)
-        sched.add_job(scheduled_saturday_clinic,
-                      CronTrigger(day_of_week="sat", hour=13, minute=30),
-                      id="sat_clinic", replace_existing=True)
-        sched.start()
-        _scheduler_started = True
-    except Exception as e:
-        # 스케줄러 실패해도 앱은 계속 동작
-        print(f"[WARN] Scheduler start failed: {e}")
-
-
-def run_one_time_bootstrap():
-    """첫 배포 시 이번주 화요일 클리닉 기록 자동 추가 (유한선: 어법성판단 추가).
-    한 번만 실행되도록 마커 파일로 관리.
-    """
-    import json
-    if os.path.exists(_BOOTSTRAP_MARKER):
-        return
-    try:
-        tue_date = _this_week_weekday_date(1)  # 이번주 화요일
-        extras = {"유한선": "어법성판단 문제 오답 풀이 추가 진행."}
-        added, _, _ = add_clinic_records(tue_date, CLINIC_STUDENTS_BY_WEEKDAY[1], extras)
-        os.makedirs(os.path.dirname(_BOOTSTRAP_MARKER), exist_ok=True)
-        with open(_BOOTSTRAP_MARKER, "w", encoding="utf-8") as f:
-            json.dump({
-                "ran_at": datetime.now().isoformat(),
-                "tue_date": tue_date,
-                "added_students": added,
-            }, f, ensure_ascii=False)
-    except Exception as e:
-        print(f"[WARN] Bootstrap failed: {e}")
-
-
-def run_one_time_bootstrap_v3_thursday():
-    """이번주 목요일 클리닉 기록 자동 추가 (배포 1회만).
-    오늘이 목요일이면 오늘 날짜로, 이미 지난주이면 가장 가까운 과거 목요일로.
-    """
-    import json
-    if os.path.exists(_BOOTSTRAP_V3_THU_MARKER):
-        return
-    try:
-        # 미래 날짜 방지: 이번주 목요일이 오늘 이후면 가장 가까운 과거 목요일 사용
-        today = datetime.now()
-        diff = 3 - today.weekday()
-        if diff > 0:
-            # 이번주 목요일이 미래 → 지난주 목요일 (또는 패스)
-            thu_date = (today + timedelta(days=diff - 7)).strftime("%Y-%m-%d")
-        else:
-            thu_date = (today + timedelta(days=diff)).strftime("%Y-%m-%d")
-        names = list(CLINIC_STUDENTS_BY_WEEKDAY[3])
-        added, _, _ = add_clinic_records(thu_date, names)
-        os.makedirs(os.path.dirname(_BOOTSTRAP_V3_THU_MARKER), exist_ok=True)
-        with open(_BOOTSTRAP_V3_THU_MARKER, "w", encoding="utf-8") as f:
-            json.dump({
-                "ran_at": datetime.now().isoformat(),
-                "thu_date": thu_date,
-                "added_students": added,
-            }, f, ensure_ascii=False)
-    except Exception as e:
-        print(f"[WARN] Bootstrap v3 (Thursday) failed: {e}")
-
-
-def run_cleanup_future_clinic_records():
-    """미래 날짜로 잘못 추가된 클리닉 기록을 일괄 삭제.
-    이전 토요일 부트스트랩이 만든 미래 기록을 정리하기 위한 1회성 작업.
-    """
-    import json
-    if os.path.exists(_CLEANUP_FUTURE_MARKER):
-        return
-    try:
-        data = load_data()
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        records = list(data["records"])
-        before = len(records)
-        records = [
-            r for r in records
-            if not (r.get("category") == CLINIC_CATEGORY
-                    and r.get("date", "") > today_str)
-        ]
-        removed = before - len(records)
-        if removed > 0:
-            save_data(data["students"], records)
-        os.makedirs(os.path.dirname(_CLEANUP_FUTURE_MARKER), exist_ok=True)
-        with open(_CLEANUP_FUTURE_MARKER, "w", encoding="utf-8") as f:
-            json.dump({
-                "ran_at": datetime.now().isoformat(),
-                "removed_count": removed,
-            }, f, ensure_ascii=False)
-    except Exception as e:
-        print(f"[WARN] cleanup failed: {e}")
-
-
-# 모듈 import 시점에 부트스트랩 + 스케줄러 가동
-# 순서: (1) 화요일 기록 — 이전 배포에서 이미 실행됨
-#       (2) 미래 클리닉 기록 정리 — 토요일 부트스트랩이 잘못 만든 기록 제거
-#       (3) 이번주 목요일 기록 — 이성우 포함
-#       (4) 스케줄러 가동 — 화 23:30 / 목 23:30 / 토 13:30
-run_one_time_bootstrap()
-run_cleanup_future_clinic_records()
-run_one_time_bootstrap_v3_thursday()
-start_clinic_scheduler()
+# 자동 클리닉 스케줄러/부트스트랩 제거됨 (완전 수동 전환).
+# 클리닉 기록은 관리자 화면(/admin/clinic)에서 직접 추가/삭제한다.
 
 
 # ─── 인증 ────────────────────────────────────────────────────
@@ -1655,67 +1562,111 @@ def admin_student_edit(code):
 
 
 # ─── 라우트: 관리자 — 클리닉 관리 ────────────────────────
+def _flash_clinic_result(date_str, added, updated, skipped):
+    parts = [f"{date_str} 클리닉 기록"]
+    if added:
+        parts.append(f"신규 추가 {len(added)}명 ({', '.join(added)})")
+    if updated:
+        parts.append(f"메모 추가됨 {len(updated)}명 ({', '.join(updated)})")
+    if skipped:
+        parts.append(f"이미 있어 건너뜀 {len(skipped)}명")
+    if not (added or updated or skipped):
+        parts.append("처리할 학생이 없습니다")
+    flash(" · ".join(parts), "success")
+
+
 @app.route("/admin/clinic", methods=["GET", "POST"])
 @admin_required
 def admin_clinic():
     if request.method == "POST":
         action = request.form.get("action", "")
-        weekday_map = {"run_tuesday": 1, "run_thursday": 3, "run_saturday": 5}
-        weekday = weekday_map.get(action)
-        if weekday is None:
-            flash("올바르지 않은 요청입니다.", "error")
+
+        # 1) 개별 클리닉 수동 추가 (학생 복수 선택 + 날짜 + 자동피드백 여부 + 메모)
+        if action == "add_manual":
+            date_str = request.form.get("date", "").strip()
+            codes = request.form.getlist("student_codes")
+            auto_fb = request.form.get("auto_feedback") == "on"
+            note = request.form.get("note", "").strip()
+            if not date_str:
+                flash("날짜를 선택해주세요.", "error")
+            elif not codes:
+                flash("학생을 한 명 이상 선택해주세요.", "error")
+            else:
+                added, updated, skipped = add_clinic_records(
+                    date_str, codes, auto_feedback=auto_fb, note=note)
+                _flash_clinic_result(date_str, added, updated, skipped)
             return redirect(url_for("admin_clinic"))
 
-        date_str = _this_week_weekday_date(weekday)
-        names = list(CLINIC_STUDENTS_BY_WEEKDAY[weekday])
+        # 2) 요일별 정기 명단으로 한 번에 추가 (수동 트리거, 자동 스케줄 아님)
+        if action == "add_roster":
+            try:
+                weekday = int(request.form.get("weekday", -1))
+            except (ValueError, TypeError):
+                weekday = -1
+            date_str = request.form.get("date", "").strip()
+            names = load_clinic_roster().get(str(weekday), [])
+            if weekday not in (1, 3, 5) or not date_str:
+                flash("올바르지 않은 요청입니다.", "error")
+            elif not names:
+                flash("해당 요일 정기 명단이 비어 있습니다. 먼저 명단을 저장하세요.", "error")
+            else:
+                codes = _resolve_names_to_codes(names)
+                added, updated, skipped = add_clinic_records(date_str, codes, auto_feedback=True)
+                _flash_clinic_result(date_str, added, updated, skipped)
+            return redirect(url_for("admin_clinic"))
 
-        # 이번 회차 한정 추가 학생 (쉼표/공백으로 구분)
-        extra_names_raw = request.form.get("extra_students", "").strip()
-        if extra_names_raw:
-            for n in extra_names_raw.replace(",", " ").split():
-                n = n.strip()
-                if n and n not in names:
-                    names.append(n)
+        # 3) 요일별 정기 명단 저장
+        if action == "save_roster":
+            roster = {}
+            for wd, _label in CLINIC_WEEKDAYS:
+                raw = request.form.get(f"roster_{wd}", "")
+                names = [x.strip() for x in raw.replace(",", "\n").splitlines() if x.strip()]
+                roster[str(wd)] = names
+            save_clinic_roster(roster)
+            flash("요일별 정기 명단을 저장했습니다.", "success")
+            return redirect(url_for("admin_clinic"))
 
-        # 학생별 추가 메모
-        extras = {}
-        for n in names:
-            note = request.form.get(f"extra_{n}", "").strip()
-            if note:
-                extras[n] = note
+        # 4) 클리닉 기록 삭제
+        if action == "delete":
+            try:
+                idx = int(request.form.get("idx", -1))
+            except (ValueError, TypeError):
+                idx = -1
+            data = load_data()
+            if (0 <= idx < len(data["records"])
+                    and data["records"][idx].get("category") == CLINIC_CATEGORY):
+                removed = data["records"].pop(idx)
+                nm = data["students"].get(removed.get("student_code"), {}).get("name", "?")
+                save_data(data["students"], data["records"])
+                flash(f"{removed.get('date')} · {nm} 클리닉 기록을 삭제했습니다.", "success")
+            else:
+                flash("삭제할 기록을 찾지 못했습니다. (목록이 바뀌었을 수 있어요)", "error")
+            return redirect(url_for("admin_clinic"))
 
-        added, updated, skipped = add_clinic_records(date_str, names, extras)
-        msg_parts = [f"{date_str} 클리닉 기록"]
-        if added:
-            msg_parts.append(f"신규 추가 {len(added)}명 ({', '.join(added)})")
-        if updated:
-            msg_parts.append(f"메모 추가됨 {len(updated)}명 ({', '.join(updated)})")
-        if skipped:
-            msg_parts.append(f"변경 없음 {len(skipped)}명")
-        if not (added or updated or skipped):
-            msg_parts.append("처리할 학생이 없습니다")
-        flash(" · ".join(msg_parts), "success")
+        flash("올바르지 않은 요청입니다.", "error")
         return redirect(url_for("admin_clinic"))
 
-    # 최근 클리닉 기록 확인
+    # GET
     data = load_data()
     recent_clinic = sorted(
-        [r for r in data["records"] if r.get("category") == CLINIC_CATEGORY],
-        key=lambda r: r.get("date", ""),
+        [(i, r) for i, r in enumerate(data["records"]) if r.get("category") == CLINIC_CATEGORY],
+        key=lambda t: t[1].get("date", ""),
         reverse=True,
-    )[:20]
-
+    )[:30]
+    students_sorted = sorted(data["students"].items(), key=lambda kv: kv[1].get("name", ""))
+    roster = load_clinic_roster()
+    weekday_rows = [
+        {"num": wd, "label": label, "names": roster.get(str(wd), []),
+         "this_date": _this_week_weekday_date(wd)}
+        for wd, label in CLINIC_WEEKDAYS
+    ]
     return render_template(
         "admin_clinic.html",
-        tue_students=CLINIC_STUDENTS_BY_WEEKDAY[1],
-        thu_students=CLINIC_STUDENTS_BY_WEEKDAY[3],
-        sat_students=CLINIC_STUDENTS_BY_WEEKDAY[5],
-        this_tue=_this_week_weekday_date(1),
-        this_thu=_this_week_weekday_date(3),
-        this_sat=_this_week_weekday_date(5),
+        students_sorted=students_sorted,
         recent=recent_clinic,
+        weekday_rows=weekday_rows,
+        today=datetime.now().strftime("%Y-%m-%d"),
         students=data["students"],
-        scheduler_active=_scheduler_started,
     )
 
 

@@ -1,99 +1,107 @@
 {% extends "base.html" %}
-{% block title %}클리닉 자동기록 관리{% endblock %}
+{% block title %}클리닉 관리{% endblock %}
 {% block content %}
 {% include "_admin_nav.html" %}
 
+<style>
+  .clinic-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}
+  .clinic-check{display:flex;align-items:center;gap:7px;border:1.5px solid var(--line,#e3e6eb);
+    border-radius:9px;padding:8px 10px;cursor:pointer;font-size:14px}
+  .clinic-check input{width:16px;height:16px}
+  .clinic-check code{color:#8a94a6;font-size:11px}
+  .clinic-row-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .inline-form{display:inline}
+  .btn-danger{background:#e0492f;color:#fff;border:none;border-radius:8px;padding:6px 11px;
+    font-size:13px;font-weight:700;cursor:pointer}
+  .field-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px}
+  .field-row label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700}
+  .field-row input[type=date],.field-row input[type=text]{padding:9px 10px;border:1.5px solid var(--line,#e3e6eb);border-radius:8px;font-size:14px}
+  .toggle-line{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:14px}
+  .roster-block{border:1px solid var(--line,#e3e6eb);border-radius:10px;padding:12px;margin-bottom:12px}
+  .roster-block textarea{width:100%;min-height:56px;padding:9px 10px;border:1.5px solid var(--line,#e3e6eb);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical}
+</style>
+
 <header class="page-header">
   <div>
-    <h1>🩺 클리닉 자동기록 관리</h1>
-    <p class="muted small">매주 화 · 목 · 토 클리닉 기록을 자동으로 추가합니다.</p>
+    <h1>🩺 클리닉 관리</h1>
+    <p class="muted small">개별 클리닉이 있을 때마다 <b>학생·날짜를 직접 선택</b>해 기록합니다. (자동 업로드는 꺼져 있습니다)</p>
   </div>
 </header>
 
 <section class="card">
-  <h2>⚙️ 자동 스케줄러 상태</h2>
-  <p>
-    {% if scheduler_active %}
-      <span class="status-on">🟢 작동 중</span> — 한국시간 기준:
-      <b>화요일 23:30</b> · <b>목요일 23:30</b> · <b>토요일 13:30</b>
-    {% else %}
-      <span class="status-off">🔴 비활성</span> — 스케줄러 시작 실패. 서버 재시작 필요.
-    {% endif %}
-  </p>
-  <p class="muted small">스케줄러는 자동으로 같은 날짜·학생의 중복 기록을 건너뜁니다.</p>
-  <p class="muted small">📍 추가된 기록은 <a href="{{ url_for('admin_records') }}"><b>📋 기록 관리</b></a> 페이지에서 확인하실 수 있습니다.
-    학생별 추가 메모를 입력하면 이미 존재하는 기록에도 <b>[추가] 메모 형태로 누적</b>됩니다.</p>
+  <p class="muted small">ℹ️ 매주 자동으로 기록이 올라가던 기능은 <b>중지</b>되었습니다. 이제 아래에서 직접 추가하며,
+    같은 날짜·학생의 기록은 자동으로 중복 방지됩니다. 추가된 기록은
+    <a href="{{ url_for('admin_records') }}"><b>📋 기록 관리</b></a>에서도 보입니다.</p>
 </section>
 
-<!-- 화요일 클리닉 -->
+<!-- ① 개별 클리닉 추가 -->
 <section class="card">
-  <h2>📅 화요일 클리닉 ({{ this_tue }})</h2>
-  <p class="muted">정기 학생: <b>{{ tue_students | join(', ') }}</b></p>
+  <h2>➕ 개별 클리닉 추가</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="add_manual">
 
-  <form method="post" class="form">
-    <input type="hidden" name="action" value="run_tuesday">
-    <p class="muted small">학생별 추가 메모(선택)</p>
-    {% for n in tue_students %}
-    <label>
-      <span>{{ n }} 추가 메모</span>
-      <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
+    <div class="field-row">
+      <label>날짜
+        <input type="date" name="date" value="{{ today }}" required>
+      </label>
+    </div>
+
+    <p class="muted small" style="margin-bottom:4px">학생 선택 (복수 선택 가능)</p>
+    <div class="clinic-check-grid">
+      {% for code, s in students_sorted %}
+      <label class="clinic-check">
+        <input type="checkbox" name="student_codes" value="{{ code }}">
+        <span>{{ s.name }} <code>{{ code }}</code></span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <label class="toggle-line">
+      <input type="checkbox" name="auto_feedback" checked>
+      <span>자동 피드백 문구 생성 (체크 해제 시 아래 메모를 그대로 피드백으로 사용)</span>
     </label>
-    {% endfor %}
-    <label>
-      <span>이번 회차 한정 추가 학생 (선택)</span>
-      <input type="text" name="extra_students" placeholder="예: 김민지, 이도윤 (쉼표 또는 공백 구분)">
-    </label>
-    <button type="submit" class="btn-primary">📝 이번주 화요일 클리닉 기록 추가</button>
+
+    <label style="display:block;font-size:13px;font-weight:700;margin-bottom:4px">공통 메모 (선택)</label>
+    <textarea name="note" rows="2" style="width:100%;padding:9px 10px;border:1.5px solid #e3e6eb;border-radius:8px;font-family:inherit;font-size:14px"
+      placeholder="이번 클리닉 특이사항 (자동 피드백이 켜져 있으면 [추가] 메모로 붙습니다)"></textarea>
+
+    <button type="submit" class="btn-primary" style="margin-top:12px">📝 선택한 학생 클리닉 기록 추가</button>
   </form>
 </section>
 
-<!-- 목요일 클리닉 -->
+<!-- ② 요일별 정기 명단 -->
 <section class="card">
-  <h2>📅 목요일 클리닉 ({{ this_thu }})</h2>
-  <p class="muted">정기 학생: <b>{{ thu_students | join(', ') }}</b></p>
+  <h2>📅 요일별 정기 명단</h2>
+  <p class="muted small">자주 오는 클리닉 학생을 요일별로 저장해두고, <b>한 번에 추가</b>할 수 있습니다. (자동 실행 아님 — 버튼으로만 추가)</p>
 
-  <form method="post" class="form">
-    <input type="hidden" name="action" value="run_thursday">
-    <p class="muted small">학생별 추가 메모(선택)</p>
-    {% for n in thu_students %}
-    <label>
-      <span>{{ n }} 추가 메모</span>
-      <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
-    </label>
+  <form method="post">
+    <input type="hidden" name="action" value="save_roster">
+    {% for wd in weekday_rows %}
+    <div class="roster-block">
+      <b>{{ wd.label }}</b>
+      <textarea name="roster_{{ wd.num }}" placeholder="학생 이름을 쉼표 또는 줄바꿈으로 구분">{{ wd.names | join(', ') }}</textarea>
+    </div>
     {% endfor %}
-    <label>
-      <span>이번 회차 한정 추가 학생 (선택)</span>
-      <input type="text" name="extra_students" placeholder="예: 김민지, 이도윤 (쉼표 또는 공백 구분)">
-    </label>
-    <button type="submit" class="btn-primary">📝 이번주 목요일 클리닉 기록 추가</button>
+    <button type="submit" class="btn-primary">💾 명단 저장</button>
   </form>
+
+  <hr style="margin:16px 0;border:none;border-top:1px solid #eee">
+  <p class="muted small">저장된 명단으로 특정 날짜에 한 번에 추가:</p>
+  {% for wd in weekday_rows %}
+  <form method="post" class="clinic-row-actions" style="margin-bottom:8px">
+    <input type="hidden" name="action" value="add_roster">
+    <input type="hidden" name="weekday" value="{{ wd.num }}">
+    <span style="min-width:60px"><b>{{ wd.label }}</b></span>
+    <span class="muted small">{{ wd.names | join(', ') or '(명단 없음)' }}</span>
+    <input type="date" name="date" value="{{ wd.this_date }}">
+    <button type="submit" class="btn-primary" style="padding:7px 12px;font-size:13px" {% if not wd.names %}disabled{% endif %}>이 명단으로 추가</button>
+  </form>
+  {% endfor %}
 </section>
 
-<!-- 토요일 클리닉 -->
+<!-- ③ 최근 클리닉 기록 + 삭제 -->
 <section class="card">
-  <h2>📅 토요일 클리닉 ({{ this_sat }})</h2>
-  <p class="muted">정기 학생: <b>{{ sat_students | join(', ') }}</b></p>
-
-  <form method="post" class="form">
-    <input type="hidden" name="action" value="run_saturday">
-    <p class="muted small">학생별 추가 메모(선택)</p>
-    {% for n in sat_students %}
-    <label>
-      <span>{{ n }} 추가 메모</span>
-      <input type="text" name="extra_{{ n }}" placeholder="(이번 회차 특이사항이 있으면 입력)">
-    </label>
-    {% endfor %}
-    <label>
-      <span>이번 회차 한정 추가 학생 (선택)</span>
-      <input type="text" name="extra_students" placeholder="예: 신성균 (쉼표 또는 공백 구분)">
-    </label>
-    <button type="submit" class="btn-primary">📝 이번주 토요일 클리닉 기록 추가</button>
-  </form>
-</section>
-
-<!-- 최근 기록 -->
-<section class="card">
-  <h2>📋 최근 클리닉 기록 (최대 20건)</h2>
+  <h2>📋 최근 클리닉 기록 (최대 30건)</h2>
   {% if not recent %}
   <p class="muted">아직 추가된 클리닉 기록이 없습니다.</p>
   {% else %}
@@ -101,17 +109,26 @@
     <thead>
       <tr>
         <th style="width:100px">날짜</th>
-        <th style="width:120px">학생</th>
+        <th style="width:130px">학생</th>
         <th>피드백</th>
+        <th style="width:70px">삭제</th>
       </tr>
     </thead>
     <tbody>
-      {% for r in recent %}
+      {% for idx, r in recent %}
       <tr>
         <td>{{ r.date }}</td>
         <td>{{ students.get(r.student_code, {}).get('name', '?') }}
             <br><code class="muted small">{{ r.student_code }}</code></td>
         <td class="feedback">{{ r.feedback }}</td>
+        <td>
+          <form method="post" class="inline-form"
+                onsubmit="return confirm('이 클리닉 기록을 삭제할까요?');">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="idx" value="{{ idx }}">
+            <button type="submit" class="btn-danger">삭제</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
