@@ -1294,6 +1294,13 @@ def admin():
                     flash(f"엑셀 파일을 읽을 수 없습니다: {e}", "error")
                     return redirect(url_for("admin"))
 
+                # 업로드 시 학기/과정이 비어있으면 자동으로 기본값(2학기 정규반) 지정
+                defaulted_term_count = 0
+                for r in new_records:
+                    if not r.get("term"):
+                        r["term"] = DEFAULT_TERM
+                        defaulted_term_count += 1
+
                 if mode == "append":
                     current = load_data()
 
@@ -1363,12 +1370,17 @@ def admin():
                                  (f" (중복 {skipped_hws}건 건너뜀)" if skipped_hws else ""))
                     parts.append(f"새 한마디 {len(unique_msgs)}건" +
                                  (f" (중복 {skipped_msgs}건 건너뜀)" if skipped_msgs else ""))
+                    if defaulted_term_count:
+                        parts.append(f"학기 미지정 {defaulted_term_count}건 → '{DEFAULT_TERM}' 자동 배정")
                     flash("추가 완료: " + " · ".join(parts), "success")
                 else:
                     save_data(new_students, new_records, new_homeworks, new_messages)
+                    tail = ""
+                    if defaulted_term_count:
+                        tail = f" (학기 미지정 {defaulted_term_count}건은 '{DEFAULT_TERM}'으로 자동 배정)"
                     flash(
                         f"덮어쓰기 완료: 학생 {len(new_students)}명, 기록 {len(new_records)}건, "
-                        f"숙제 {len(new_homeworks)}건, 한마디 {len(new_messages)}건으로 전체 교체됨.",
+                        f"숙제 {len(new_homeworks)}건, 한마디 {len(new_messages)}건으로 전체 교체됨.{tail}",
                         "success"
                     )
         return redirect(url_for("admin"))
