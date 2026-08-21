@@ -86,11 +86,14 @@ def _parse_workbook(wb):
             # 비고(플래그)와 완료(처리됨) 컬럼 위치 자동 탐지 — 어디에 있어도 OK
             flag_idx = None
             resolved_idx = None
+            term_idx = None
             for i, h in enumerate(header):
                 if h in ("비고", "특이사항", "플래그", "flag", "메모"):
                     flag_idx = i
                 if h in ("완료", "해결", "처리", "처리됨", "resolved", "done"):
                     resolved_idx = i
+                if h in ("학기/과정", "학기", "과정", "term", "session"):
+                    term_idx = i
 
             def _parse_resolved(v):
                 if v is None:
@@ -123,6 +126,9 @@ def _parse_workbook(wb):
                 rec["resolved"] = (_parse_resolved(row[resolved_idx])
                                    if resolved_idx is not None and len(row) > resolved_idx
                                    else False)
+                rec["term"] = (str(row[term_idx]).strip()
+                               if term_idx is not None and len(row) > term_idx and row[term_idx]
+                               else "")
                 records.append(rec)
 
     homeworks = []
@@ -224,6 +230,21 @@ def _add_records_dropdowns(ws):
     dv_done.add("H2:H2000")
 
 
+def _add_term_dropdown(ws):
+    """`기록` 시트의 학기/과정(I열)에 드롭다운 추가."""
+    options = ",".join(TERMS)
+    dv = DataValidation(
+        type="list",
+        formula1=f'"{options}"',
+        allow_blank=True,
+        showErrorMessage=True,
+    )
+    dv.error = f"{' 또는 '.join(TERMS)} 중에서 선택하세요."
+    dv.errorTitle = "잘못된 학기"
+    ws.add_data_validation(dv)
+    dv.add("I2:I2000")
+
+
 def _add_announcements_dropdown(ws):
     """`공지사항` 시트의 상태(E열)에 게시/내림 드롭다운."""
     dv = DataValidation(
@@ -261,7 +282,7 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
         ws1.append([code, s.get("name", ""), s.get("pin", ""), s.get("parent", "")])
 
     ws2 = wb.create_sheet("기록")
-    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료"])
+    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료", "학기/과정"])
     for r in records:
         code = r.get("student_code", "")
         name = students.get(code, {}).get("name", "")
@@ -274,6 +295,7 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
             r.get("feedback", ""),
             r.get("flag", ""),
             "O" if r.get("resolved") else "",
+            r.get("term", ""),
         ])
 
     ws3 = wb.create_sheet("공지사항")
@@ -299,13 +321,14 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
-        (ws2, [12, 10, 12, 14, 8, 40, 12, 8]),
+        (ws2, [12, 10, 12, 14, 8, 40, 12, 8, 14]),
         (ws3, [14, 14, 12, 50, 10]),
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
     _add_records_dropdowns(ws2)
+    _add_term_dropdown(ws2)
     _add_announcements_dropdown(ws3)
 
     wb.save(EXCEL_PATH)
@@ -341,6 +364,12 @@ def records_for(student_code):
     for r in items:
         grouped[r["category"] or "기타"].append(r)
     return items, dict(grouped)
+
+
+# ─── 학기/과정 (Term) 구분 ────────────────────────────────
+TERMS = ["2학기 정규반", "방학특강"]
+DEFAULT_TERM = "2학기 정규반"
+_TERM_MIGRATION_MARKER = os.path.join(DATA_DIR, ".term_migration_v1.json")
 
 
 # ─── 단어 시험 회차 정의 ──────────────────────────────────
@@ -811,6 +840,7 @@ def add_clinic_records(clinic_date_str, student_codes, auto_feedback=True, note=
                 "feedback": feedback,
                 "flag": "",
                 "resolved": False,
+                "term": DEFAULT_TERM,
             })
             added_names.append(name)
 
@@ -941,7 +971,34 @@ def my_page():
         session.clear()
         return redirect(url_for("login"))
 
-    items, grouped = records_for(code)
+    # 선택된 학기 (기본: 2학기 정규반). ?term=X 로 전환
+    selected_term = request.args.get("term", DEFAULT_TERM)
+    if selected_term not in TERMS:
+        selected_term = DEFAULT_TERM
+
+    # 이 학생의 전체 기록 (탭 뱃지 카운트용)
+    all_items = [r for r in data["records"] if r["student_code"] == code]
+    # 학기별 카운트
+    term_counts = {t: 0 for t in TERMS}
+    for r in all_items:
+        t = r.get("term") or DEFAULT_TERM
+        if t in term_counts:
+            term_counts[t] += 1
+
+    # 선택된 학기로 필터링
+    def _term_of(r):
+        return r.get("term") or DEFAULT_TERM
+
+    items = [r for r in all_items if _term_of(r) == selected_term]
+    items.sort(key=lambda r: r.get("date", ""), reverse=True)
+
+    grouped = defaultdict(list)
+    for r in items:
+        grouped[r["category"] or "기타"].append(r)
+    grouped = dict(grouped)
+
+    # 학기 필터가 적용된 전체 기록 (반 평균/등수 계산용)
+    term_all_records = [r for r in data["records"] if _term_of(r) == selected_term]
 
     # 학생 본인 카테고리별 통계
     stats = {}
@@ -955,9 +1012,9 @@ def my_page():
                 "min": min(nums),
             }
 
-    # 반 전체 카테고리별 평균 (모든 학생 합산)
+    # 반 전체 카테고리별 평균 (해당 학기 학생들만)
     class_buckets = defaultdict(list)
-    for r in data["records"]:
+    for r in term_all_records:
         v = _parse_score(r["score"])
         if v is not None:
             class_buckets[r["category"] or "기타"].append(v)
@@ -966,7 +1023,7 @@ def my_page():
         for cat, vs in class_buckets.items() if vs
     }
 
-    # 카테고리별 추세 그래프 데이터 (이 학생만, 날짜 오름차순)
+    # 카테고리별 추세 그래프 (이 학생, 이 학기만)
     charts = {}
     for cat, recs in grouped.items():
         pts = []
@@ -985,14 +1042,16 @@ def my_page():
         and (not m.get("student_code") or m.get("student_code") == code)
     ]
 
-    # 게시 중인 숙제만 (가장 최근 게시본 사용)
-    published_homeworks = [h["content"] for h in data["homeworks"] if h.get("published", True)]
-    homework = "\n\n".join(published_homeworks) if published_homeworks else ""
+    # 게시 중인 숙제만 (2학기 정규반에서만 표시)
+    if selected_term == DEFAULT_TERM:
+        published_homeworks = [h["content"] for h in data["homeworks"] if h.get("published", True)]
+        homework = "\n\n".join(published_homeworks) if published_homeworks else ""
+    else:
+        homework = ""
 
-    # 반 등수 계산: 항목명 기준 (날짜 무관, 모든 반 통합)
-    # 같은 학생이 같은 항목에 여러 점수가 있으면 최고점 기준으로 순위 산정
-    cat_best = defaultdict(dict)  # cat -> {code -> best_score}
-    for r in data["records"]:
+    # 반 등수 (항목명 기준, 학기 필터 적용)
+    cat_best = defaultdict(dict)
+    for r in term_all_records:
         sc = _parse_score(r["score"])
         if sc is None:
             continue
@@ -1001,11 +1060,10 @@ def my_page():
         if sc_code not in cat_best[cat] or sc > cat_best[cat][sc_code]:
             cat_best[cat][sc_code] = sc
 
-    # 경쟁식 순위 (동점은 같은 등수, 다음 등수는 인원만큼 건너뜀): 1, 2, 2, 4
-    ranks = {}  # "code|category" -> (rank, total)
+    ranks = {}
     for cat, code_scores in cat_best.items():
         if len(code_scores) < 2:
-            continue  # 응시자 1명이면 등수 의미 없음
+            continue
         sorted_entries = sorted(code_scores.items(), key=lambda x: -x[1])
         prev_score = None
         current_rank = 0
@@ -1015,36 +1073,32 @@ def my_page():
                 prev_score = s
             ranks[f"{c}|{cat}"] = (current_rank, len(code_scores))
 
-    # 날짜별 그룹핑 (이 학생만, 날짜 내림차순)
+    # 날짜별 그룹핑
     by_date_dict = defaultdict(list)
     for r in items:
         by_date_dict[r["date"]].append(r)
     by_date = sorted(by_date_dict.items(), key=lambda x: x[0], reverse=True)
 
-    # 미처리 특이사항 (재시/숙제미비/추가과제 등)
+    # 미처리 특이사항
     my_flags = [r for r in items if r.get("flag") and not r.get("resolved")]
     my_flags.sort(key=lambda r: r["date"], reverse=True)
 
-    # 단어 시험 회차별 완료 상태
+    # zone 계산 (모두 학기 필터된 items 기준)
     word_tests = compute_word_test_status(items)
     word_tests_done = sum(1 for t in word_tests if t["completed"])
     word_tests_total = len(word_tests)
 
-    # Review test (항목명 기반) — 'review'/'리뷰'가 포함된 모든 항목
     review_records = compute_review_test_records(items)
     review_done = sum(1 for r in review_records if r["completed"])
     review_total = len(review_records)
 
-    # 평가 시험 4종 (중간평가 2차는 대상자만 카운트)
     evaluations = compute_evaluation_status(items)
 
-    # 각 평가별 반 평균 + 본인 등수 (전체 학생 대상)
-    # 주의: 위에서 만든 class_avg(카테고리별 dict)와 이름 충돌하지 않도록 별도 변수명 사용
+    # 평가별 반 평균/등수 (학기 필터 적용)
     for ev_info in EVALUATION_TESTS:
         ev_key = ev_info["key"]
-        # 해당 평가에 응시한 학생들의 최고점 수집
         student_best = {}
-        for r in data["records"]:
+        for r in term_all_records:
             if not _record_matches_evaluation(r, ev_key):
                 continue
             sc = _parse_score(r.get("score", ""))
@@ -1054,7 +1108,6 @@ def my_page():
             if sc_code not in student_best or sc > student_best[sc_code]:
                 student_best[sc_code] = sc
 
-        # 평균 + 본인 등수 계산 (다른 변수명으로!)
         ev_avg = None
         ev_count = 0
         ev_rank = None
@@ -1073,7 +1126,6 @@ def my_page():
                         ev_rank = (current_rank, len(student_best))
                         break
 
-        # 해당 평가 entry에 정보 부착
         for e in evaluations:
             if e["key"] == ev_key:
                 e["class_avg"] = ev_avg
@@ -1107,6 +1159,10 @@ def my_page():
         evaluations=evaluations,
         eval_done=eval_done,
         eval_total=eval_total,
+        terms=TERMS,
+        selected_term=selected_term,
+        term_counts=term_counts,
+        default_term=DEFAULT_TERM,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 
@@ -1402,6 +1458,7 @@ def admin_records():
         feedback = request.form.get("feedback", "").strip()
         flag = request.form.get("flag", "").strip()
         resolved = request.form.get("resolved") == "on"
+        term = request.form.get("term", "").strip() or DEFAULT_TERM
 
         if not date:
             flash("날짜를 입력해주세요.", "error")
@@ -1418,6 +1475,7 @@ def admin_records():
                 "feedback": feedback,
                 "flag": flag,
                 "resolved": resolved,
+                "term": term,
             })
             save_data(data["students"], data["records"])
             flash(f"{data['students'][student_code]['name']} 학생의 기록이 추가되었습니다.", "success")
@@ -1427,12 +1485,15 @@ def admin_records():
 
     filter_student = request.args.get("student", "").strip()
     filter_category = request.args.get("category", "").strip()
+    filter_term = request.args.get("term", "").strip()
 
     indexed = list(enumerate(data["records"]))
     if filter_student:
         indexed = [(i, r) for i, r in indexed if r["student_code"] == filter_student]
     if filter_category:
         indexed = [(i, r) for i, r in indexed if r["category"] == filter_category]
+    if filter_term:
+        indexed = [(i, r) for i, r in indexed if (r.get("term") or DEFAULT_TERM) == filter_term]
 
     indexed.sort(key=lambda x: x[1]["date"], reverse=True)
 
@@ -1446,7 +1507,10 @@ def admin_records():
         categories=categories,
         filter_student=filter_student,
         filter_category=filter_category,
+        filter_term=filter_term,
         today=today,
+        terms=TERMS,
+        default_term=DEFAULT_TERM,
     )
 
 
@@ -1473,6 +1537,7 @@ def admin_record_edit(idx):
                 "feedback": request.form.get("feedback", "").strip(),
                 "flag": request.form.get("flag", "").strip(),
                 "resolved": request.form.get("resolved") == "on",
+                "term": request.form.get("term", "").strip() or DEFAULT_TERM,
             }
             save_data(data["students"], data["records"])
             flash("기록이 수정되었습니다.", "success")
@@ -1484,6 +1549,8 @@ def admin_record_edit(idx):
         idx=idx,
         students=data["students"],
         categories=sorted({r["category"] for r in data["records"] if r["category"]}),
+        terms=TERMS,
+        default_term=DEFAULT_TERM,
     )
 
 
@@ -1947,14 +2014,14 @@ def download_template():
     ws1.append(["S002", "이도윤", "5678", "이도윤 어머니"])
 
     ws2 = wb.create_sheet("기록")
-    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료"])
+    ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료", "학기/과정"])
     ws2.append(["2026-05-18", "S001", "김민지", "Daily Test", "92",
-                "어휘 문제에서 실수가 있었지만 독해는 완벽했습니다.", "", ""])
-    ws2.append(["2026-05-18", "S001", "김민지", "숙제", "완료", "꼼꼼하게 잘 했습니다.", "", ""])
+                "어휘 문제에서 실수가 있었지만 독해는 완벽했습니다.", "", "", "2학기 정규반"])
+    ws2.append(["2026-05-18", "S001", "김민지", "숙제", "완료", "꼼꼼하게 잘 했습니다.", "", "", "2학기 정규반"])
     ws2.append(["2026-05-18", "S002", "이도윤", "단어시험", "60",
-                "기준 미달, 재시 필요.", "재시", ""])
-    ws2.append(["2026-05-17", "S002", "이도윤", "숙제", "미제출",
-                "다음 시간 꼭 챙겨오세요.", "숙제미비", "O"])
+                "기준 미달, 재시 필요.", "재시", "", "2학기 정규반"])
+    ws2.append(["2026-01-15", "S002", "이도윤", "중간평가", "38",
+                "재시 대상.", "재시", "", "방학특강"])
 
     ws3 = wb.create_sheet("공지사항")
     ws3.append(["종류", "대상학생코드", "학생이름", "내용", "상태"])
@@ -1965,13 +2032,14 @@ def download_template():
 
     for ws, widths in [
         (ws1, [10, 12, 8, 18]),
-        (ws2, [12, 10, 12, 14, 8, 40, 12, 8]),
+        (ws2, [12, 10, 12, 14, 8, 40, 12, 8, 14]),
         (ws3, [14, 14, 12, 50, 10]),
     ]:
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[chr(64 + i)].width = w
 
     _add_records_dropdowns(ws2)
+    _add_term_dropdown(ws2)
     _add_announcements_dropdown(ws3)
 
     buf = io.BytesIO()
@@ -1989,6 +2057,39 @@ def download_template():
 @app.route("/healthz")
 def healthz():
     return "ok", 200
+
+
+# ─── 1회성 마이그레이션: 기존 기록 → 방학특강 표시 ───────────
+def run_one_time_term_migration():
+    """1회성: 기존 모든 기록의 학기/과정 필드가 비어있으면 '방학특강'으로 표시.
+    이후 신규 기록은 폼 기본값(2학기 정규반)으로 저장됨.
+    """
+    import json
+    if os.path.exists(_TERM_MIGRATION_MARKER):
+        return
+    try:
+        data = load_data()
+        records = list(data["records"])
+        modified = 0
+        for r in records:
+            if not r.get("term"):
+                r["term"] = "방학특강"
+                modified += 1
+        if modified > 0:
+            save_data(data["students"], records)
+        os.makedirs(os.path.dirname(_TERM_MIGRATION_MARKER), exist_ok=True)
+        with open(_TERM_MIGRATION_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "modified_count": modified,
+            }, f, ensure_ascii=False)
+        print(f"[INFO] Term migration completed: {modified} records marked as 방학특강")
+    except Exception as e:
+        print(f"[WARN] Term migration failed: {e}")
+
+
+# 앱 import 시점에 마이그레이션 실행
+run_one_time_term_migration()
 
 
 # ─── 메인 ────────────────────────────────────────────────────

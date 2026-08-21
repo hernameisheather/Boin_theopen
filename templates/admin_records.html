@@ -47,6 +47,14 @@
           <option value="우수">🌟 우수</option>
         </select>
       </label>
+      <label>
+        <span>학기/과정</span>
+        <select name="term">
+          {% for t in terms %}
+          <option value="{{ t }}" {% if t == default_term %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </label>
     </div>
     <label>
       <span>피드백</span>
@@ -78,7 +86,16 @@
           {% endfor %}
         </select>
       </label>
-      {% if filter_student or filter_category %}
+      <label>
+        <span>학기/과정</span>
+        <select name="term" onchange="this.form.submit()">
+          <option value="">전체 학기</option>
+          {% for t in terms %}
+          <option value="{{ t }}" {% if filter_term == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if filter_student or filter_category or filter_term %}
       <a href="{{ url_for('admin_records') }}" class="btn-ghost">필터 초기화</a>
       {% endif %}
     </div>

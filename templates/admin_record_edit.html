@@ -48,6 +48,15 @@
           {% endif %}
         </select>
       </label>
+      <label>
+        <span>학기/과정</span>
+        <select name="term">
+          {% set current_term = record.term or default_term %}
+          {% for t in terms %}
+          <option value="{{ t }}" {% if t == current_term %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </label>
     </div>
     <label class="checkbox-label">
       <input type="checkbox" name="resolved" {% if record.resolved %}checked{% endif %}>
