@@ -26,28 +26,6 @@
   <a href="{{ url_for('logout') }}" class="btn-ghost">로그아웃</a>
 </header>
 
-<nav class="term-tabs" role="tablist">
-  {% for t in terms %}
-  <a href="{{ url_for('my_page', term=t) }}"
-     class="term-tab {% if t == selected_term %}active{% endif %}
-            {% if t == default_term %}term-current{% else %}term-archive{% endif %}"
-     role="tab" aria-selected="{{ 'true' if t == selected_term else 'false' }}">
-    {% if t == default_term %}📚{% else %}📖{% endif %}
-    {{ t }}
-    {% if term_counts.get(t, 0) > 0 %}
-    <span class="term-count">{{ term_counts[t] }}</span>
-    {% endif %}
-  </a>
-  {% endfor %}
-</nav>
-
-{% if selected_term != default_term %}
-<div class="term-archive-notice">
-  📖 <b>{{ selected_term }}</b> 아카이브 보기 중 —
-  <a href="{{ url_for('my_page', term=default_term) }}">🔙 {{ default_term }} 로 돌아가기</a>
-</div>
-{% endif %}
-
 {% if my_flags %}
 <section class="card flag-alert-card">
   <h2>⚠️ 알림 사항 ({{ my_flags|length }}건)</h2>

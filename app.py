@@ -970,25 +970,15 @@ def my_page():
         session.clear()
         return redirect(url_for("login"))
 
-    # 선택된 학기 (기본: 2학기 정규반). ?term=X 로 전환
-    selected_term = request.args.get("term", DEFAULT_TERM)
-    if selected_term not in TERMS:
-        selected_term = DEFAULT_TERM
+    # 학부모/학생 페이지는 항상 2학기 정규반만 표시 (방학특강은 관리자 페이지에서만 조회 가능)
+    selected_term = DEFAULT_TERM
 
-    # 이 학생의 전체 기록 (탭 뱃지 카운트용)
-    all_items = [r for r in data["records"] if r["student_code"] == code]
-    # 학기별 카운트
-    term_counts = {t: 0 for t in TERMS}
-    for r in all_items:
-        t = r.get("term") or DEFAULT_TERM
-        if t in term_counts:
-            term_counts[t] += 1
-
-    # 선택된 학기로 필터링
     def _term_of(r):
         return r.get("term") or DEFAULT_TERM
 
-    items = [r for r in all_items if _term_of(r) == selected_term]
+    # 이 학생의 2학기 정규반 기록만
+    items = [r for r in data["records"]
+             if r["student_code"] == code and _term_of(r) == selected_term]
     items.sort(key=lambda r: r.get("date", ""), reverse=True)
 
     grouped = defaultdict(list)
@@ -1110,10 +1100,6 @@ def my_page():
         review_records=review_records,
         review_done=review_done,
         review_total=review_total,
-        terms=TERMS,
-        selected_term=selected_term,
-        term_counts=term_counts,
-        default_term=DEFAULT_TERM,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
     )
 
