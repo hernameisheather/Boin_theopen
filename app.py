@@ -1755,9 +1755,26 @@ def admin_clinic():
 def admin_rankings():
     data = load_data()
 
-    # 항목별로 학생별 점수 모으기 (숫자 점수만)
+    # 학기 필터 (기본: 2학기 정규반)
+    selected_term = request.args.get("term", DEFAULT_TERM)
+    if selected_term not in TERMS:
+        selected_term = DEFAULT_TERM
+
+    def _term_of(r):
+        return r.get("term") or DEFAULT_TERM
+
+    # 학기별 카운트 (탭 뱃지용)
+    term_counts = {t: 0 for t in TERMS}
+    for r in data["records"]:
+        t = _term_of(r)
+        if t in term_counts:
+            term_counts[t] += 1
+
+    # 항목별로 학생별 점수 모으기 (숫자 점수만, 선택된 학기만)
     cat_scores = defaultdict(lambda: defaultdict(list))  # cat -> {code -> [scores]}
     for r in data["records"]:
+        if _term_of(r) != selected_term:
+            continue
         sc = _parse_score(r["score"])
         if sc is None:
             continue
@@ -1835,6 +1852,10 @@ def admin_rankings():
         categories=sorted_cats,
         overall=overall,
         total_students=len(data["students"]),
+        terms=TERMS,
+        selected_term=selected_term,
+        term_counts=term_counts,
+        default_term=DEFAULT_TERM,
     )
 
 
