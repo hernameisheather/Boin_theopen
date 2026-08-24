@@ -374,11 +374,10 @@ _TERM_MIGRATION_MARKER = os.path.join(DATA_DIR, ".term_migration_v1.json")
 
 # ─── 단어 시험 회차 정의 ──────────────────────────────────
 WORD_TEST_ROUNDS = [
-    {"label": "1회차", "range": "16-20"},
-    {"label": "2회차", "range": "21-23"},
-    {"label": "3회차", "range": "24-26"},
-    {"label": "4회차", "range": "27-28"},
-    {"label": "5회차", "range": "29-30"},
+    {"label": "1회차", "range": "31-34"},
+    {"label": "2회차", "range": "35-38"},
+    {"label": "3회차", "range": "39-42"},
+    {"label": "4회차", "range": "43-45"},
 ]
 
 
@@ -1092,51 +1091,6 @@ def my_page():
     review_done = sum(1 for r in review_records if r["completed"])
     review_total = len(review_records)
 
-    evaluations = compute_evaluation_status(items)
-
-    # 평가별 반 평균/등수 (학기 필터 적용)
-    for ev_info in EVALUATION_TESTS:
-        ev_key = ev_info["key"]
-        student_best = {}
-        for r in term_all_records:
-            if not _record_matches_evaluation(r, ev_key):
-                continue
-            sc = _parse_score(r.get("score", ""))
-            if sc is None:
-                continue
-            sc_code = r["student_code"]
-            if sc_code not in student_best or sc > student_best[sc_code]:
-                student_best[sc_code] = sc
-
-        ev_avg = None
-        ev_count = 0
-        ev_rank = None
-        if student_best:
-            ev_avg = round(sum(student_best.values()) / len(student_best), 1)
-            ev_count = len(student_best)
-            if code in student_best:
-                sorted_entries = sorted(student_best.items(), key=lambda x: -x[1])
-                prev_score = None
-                current_rank = 0
-                for i, (sc_code, sc) in enumerate(sorted_entries):
-                    if sc != prev_score:
-                        current_rank = i + 1
-                        prev_score = sc
-                    if sc_code == code:
-                        ev_rank = (current_rank, len(student_best))
-                        break
-
-        for e in evaluations:
-            if e["key"] == ev_key:
-                e["class_avg"] = ev_avg
-                e["class_count"] = ev_count
-                e["class_rank"] = ev_rank
-                break
-
-    eval_eligible = [e for e in evaluations if e["is_eligible"]]
-    eval_done = sum(1 for e in eval_eligible if e["completed"])
-    eval_total = len(eval_eligible)
-
     return render_template(
         "student.html",
         student=student,
@@ -1156,9 +1110,6 @@ def my_page():
         review_records=review_records,
         review_done=review_done,
         review_total=review_total,
-        evaluations=evaluations,
-        eval_done=eval_done,
-        eval_total=eval_total,
         terms=TERMS,
         selected_term=selected_term,
         term_counts=term_counts,
