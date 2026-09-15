@@ -13,6 +13,15 @@
   </div>
 </header>
 
+{% if errors %}
+<section class="card" style="background:#fef2f2; border:1px solid #fca5a5;">
+  <h2 style="color:#991b1b;">⚠️ 일부 학생 처리 중 오류 발생 ({{ errors|length }}명)</h2>
+  {% for e in errors %}
+  <p><b>{{ e.name }}</b> ({{ e.code }}): {{ e.error }}</p>
+  {% endfor %}
+</section>
+{% endif %}
+
 <section class="stats-grid">
   <div class="stat-card">
     <div class="stat-cat">대상 학생</div>
@@ -126,28 +135,13 @@
 {% endif %}
 
 <script>
+const RETAKE_TEXT_LINES = {{ copy_all_lines | tojson }};
 function copyAllRetakeMessage() {
-  const lines = [
-    "📢 재시험 안내 (신쌤)",
-    "",
-  ];
-  {% for s in students_data %}
-  {% if s.pending_count > 0 %}
-  lines.push("─── {{ s.name }} 학생 ({{ s.pending_count }}건) ───");
-  {% for it in s.items if not it.retake_taken %}
-  lines.push("  · {{ it.type }} · {{ it.label }} ({{ it.reason }})");
-  {% endfor %}
-  lines.push("");
-  {% endif %}
-  {% endfor %}
-  lines.push("재시험 진행 후 응시 완료 처리는 관리자 페이지에서 O/X 토글로 변경됩니다.");
-
-  const text = lines.join("\n");
+  const text = RETAKE_TEXT_LINES.join("\n");
   navigator.clipboard.writeText(text).then(function() {
     document.getElementById('copy-status').textContent = "✅ 복사되었습니다! 카톡에 붙여넣기 하세요.";
     document.getElementById('copy-status').style.color = "#059669";
   }).catch(function(err) {
-    // fallback
     const ta = document.createElement("textarea");
     ta.value = text;
     document.body.appendChild(ta);

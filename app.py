@@ -1747,9 +1747,11 @@ def admin_retakes():
 
     # 학생별 재시험 대상 수집
     students_data = []
+    errors = []  # 에러 학생 로깅용
     for code, student in data["students"].items():
+      try:
         student_records = [r for r in data["records"]
-                           if r["student_code"] == code and _term_of(r) == DEFAULT_TERM]
+                           if r.get("student_code") == code and _term_of(r) == DEFAULT_TERM]
 
         retake_items = []
 
@@ -1849,6 +1851,16 @@ def admin_retakes():
                 "pending_count": pending,
                 "total_count": len(retake_items),
             })
+      except Exception as e:
+        import traceback
+        errors.append({
+            "code": code,
+            "name": student.get("name", "?") if isinstance(student, dict) else "?",
+            "error": f"{type(e).__name__}: {e}",
+            "traceback": traceback.format_exc(),
+        })
+        print(f"[ERROR] admin_retakes failed for student {code}: {e}")
+        print(traceback.format_exc())
 
     # 미완료 재시험이 많은 학생부터
     students_data.sort(key=lambda s: (-s["pending_count"], s["name"]))
@@ -1856,11 +1868,24 @@ def admin_retakes():
     total_pending = sum(s["pending_count"] for s in students_data)
     total_items = sum(s["total_count"] for s in students_data)
 
+    # 전체 복사용 텍스트 라인들 (템플릿 로직 단순화)
+    copy_all_lines = ["📢 재시험 안내 (신쌤)", ""]
+    for s in students_data:
+        if s["pending_count"] > 0:
+            copy_all_lines.append(f"─── {s['name']} 학생 ({s['pending_count']}건) ───")
+            for it in s["items"]:
+                if not it["retake_taken"]:
+                    copy_all_lines.append(f"  · {it['type']} · {it['label']} ({it['reason']})")
+            copy_all_lines.append("")
+    copy_all_lines.append("재시험 진행 후 응시 완료 처리는 관리자 페이지에서 O/X 토글로 변경됩니다.")
+
     return render_template(
         "admin_retakes.html",
         students_data=students_data,
         total_pending=total_pending,
         total_items=total_items,
+        errors=errors,
+        copy_all_lines=copy_all_lines,
     )
 
 
