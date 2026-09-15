@@ -2687,6 +2687,63 @@ def run_student_phones_bootstrap():
 run_student_phones_bootstrap()
 
 
+# ─── 학부모 전화번호 추가 등록 v2 (1차 12명 학부모 번호) ────
+_PARENT_PHONES_V2_MARKER = os.path.join(DATA_DIR, ".parent_phones_v2.json")
+
+_PARENT_PHONES_V2 = {
+    "김도헌": "010-7636-2005",
+    "김민재": "010-9809-8081",
+    "김송민": "010-6858-8619",
+    "오승준": "010-4905-6179",
+    "오우진": "010-2482-1715",
+    "유한선": "010-9770-0910",
+    "이재현": "010-9013-7405",
+    "이호준": "010-5399-1466",
+    "장우영": "010-6436-5805",
+    "정주원": "010-2538-1008",
+    "조정우": "010-6418-5814",
+    "진유준": "010-9124-6416",
+}
+
+
+def run_parent_phones_v2_bootstrap():
+    import json
+    if os.path.exists(_PARENT_PHONES_V2_MARKER):
+        return
+    try:
+        data = load_data()
+        students = dict(data["students"])
+        updated = []
+        not_found = []
+        for name, phone in _PARENT_PHONES_V2.items():
+            matched_code = None
+            for code, s in students.items():
+                if s.get("name") == name:
+                    matched_code = code
+                    break
+            if not matched_code:
+                not_found.append(name)
+                continue
+            if not students[matched_code].get("parent_phone"):
+                students[matched_code]["parent_phone"] = phone
+                updated.append(name)
+        if updated:
+            save_data(students, data["records"])
+        os.makedirs(os.path.dirname(_PARENT_PHONES_V2_MARKER), exist_ok=True)
+        with open(_PARENT_PHONES_V2_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "updated": updated,
+                "not_found": not_found,
+            }, f, ensure_ascii=False, indent=2)
+        print(f"[INFO] Parent phones v2 bootstrap: updated={len(updated)}, not_found={not_found}")
+    except Exception as e:
+        print(f"[WARN] Parent phones v2 bootstrap failed: {e}")
+
+
+run_parent_phones_v2_bootstrap()
+
+
 # ─── 메인 ────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
