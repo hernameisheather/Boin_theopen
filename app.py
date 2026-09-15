@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timedelta
 from collections import defaultdict
 from functools import wraps
+from urllib.parse import quote as url_quote
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -1820,12 +1821,30 @@ def admin_retakes():
 
         if retake_items:
             pending = sum(1 for it in retake_items if not it["retake_taken"])
+            # SMS 본문 미리 계산 (템플릿 로직 단순화)
+            phone_raw = (student.get("phone") or "").replace("-", "").replace(" ", "")
+            sms_body = ""
+            sms_body_encoded = ""
+            if phone_raw and pending > 0:
+                pending_lines = [
+                    f"· {it['type']} {it['label']}"
+                    for it in retake_items if not it["retake_taken"]
+                ]
+                sms_body = (
+                    f"[신쌤] {student.get('name', '?')} 학생 재시험 안내:\n"
+                    + "\n".join(pending_lines)
+                    + "\n\n재시험 일정 확인 부탁드립니다."
+                )
+                sms_body_encoded = url_quote(sms_body, safe="")
             students_data.append({
                 "code": code,
                 "name": student.get("name", "?"),
                 "pin": student.get("pin", ""),
                 "parent": student.get("parent", ""),
                 "phone": student.get("phone", ""),
+                "phone_raw": phone_raw,
+                "sms_body": sms_body,
+                "sms_body_encoded": sms_body_encoded,
                 "items": retake_items,
                 "pending_count": pending,
                 "total_count": len(retake_items),
