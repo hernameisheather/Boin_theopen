@@ -1847,7 +1847,7 @@ def admin_retakes():
                 "phone_raw": phone_raw,
                 "sms_body": sms_body,
                 "sms_body_encoded": sms_body_encoded,
-                "items": retake_items,
+                "retake_items": retake_items,
                 "pending_count": pending,
                 "total_count": len(retake_items),
             })
@@ -1873,7 +1873,7 @@ def admin_retakes():
     for s in students_data:
         if s["pending_count"] > 0:
             copy_all_lines.append(f"─── {s['name']} 학생 ({s['pending_count']}건) ───")
-            for it in s["items"]:
+            for it in s["retake_items"]:
                 if not it["retake_taken"]:
                     copy_all_lines.append(f"  · {it['type']} · {it['label']} ({it['reason']})")
             copy_all_lines.append("")

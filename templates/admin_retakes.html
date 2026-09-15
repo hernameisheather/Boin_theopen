@@ -97,7 +97,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for it in s.items %}
+      {% for it in s.retake_items %}
       <tr class="{% if it.retake_taken %}retake-row-done{% else %}retake-row-pending{% endif %}">
         <td>
           <span class="test-type-badge {% if it.type == '단어시험' %}type-vocab{% else %}type-review{% endif %}">
