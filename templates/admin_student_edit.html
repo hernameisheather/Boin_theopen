@@ -27,6 +27,10 @@
         <span>학부모이름(선택)</span>
         <input type="text" name="parent" value="{{ student.parent }}">
       </label>
+      <label>
+        <span>📱 전화번호(선택)</span>
+        <input type="tel" name="phone" value="{{ student.phone or '' }}" placeholder="예: 010-1234-5678">
+      </label>
     </div>
     <p class="hint">⚠️ 학생코드를 변경하면 이 학생의 모든 기존 기록도 자동으로 새 코드로 업데이트됩니다.</p>
     <div class="form-actions">

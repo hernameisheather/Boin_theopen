@@ -72,8 +72,9 @@ def _parse_workbook(wb):
             name = str(row[1]).strip() if len(row) > 1 and row[1] else ""
             pin = str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
             parent = str(row[3]).strip() if len(row) > 3 and row[3] else ""
+            phone = str(row[4]).strip() if len(row) > 4 and row[4] else ""
             if code:
-                students[code] = {"name": name, "pin": pin, "parent": parent}
+                students[code] = {"name": name, "pin": pin, "parent": parent, "phone": phone}
 
     records = []
     if "기록" in wb.sheetnames:
@@ -277,9 +278,9 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
-    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)"])
+    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)", "전화번호(선택)"])
     for code, s in students.items():
-        ws1.append([code, s.get("name", ""), s.get("pin", ""), s.get("parent", "")])
+        ws1.append([code, s.get("name", ""), s.get("pin", ""), s.get("parent", ""), s.get("phone", "")])
 
     ws2 = wb.create_sheet("기록")
     ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료", "학기/과정"])
@@ -320,7 +321,7 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
         ])
 
     for ws, widths in [
-        (ws1, [10, 12, 8, 18]),
+        (ws1, [10, 12, 8, 18, 16]),
         (ws2, [12, 10, 12, 14, 8, 40, 12, 8, 14]),
         (ws3, [14, 14, 12, 50, 10]),
     ]:
@@ -1544,13 +1545,14 @@ def admin_students():
         name = request.form.get("student_name", "").strip()
         pin = request.form.get("pin", "").strip()
         parent = request.form.get("parent", "").strip()
+        phone = request.form.get("phone", "").strip()
 
         if not code or not name:
             flash("학생코드와 이름은 필수입니다.", "error")
         elif code in data["students"]:
             flash(f"학생코드 '{code}'는 이미 사용 중입니다.", "error")
         else:
-            data["students"][code] = {"name": name, "pin": pin, "parent": parent}
+            data["students"][code] = {"name": name, "pin": pin, "parent": parent, "phone": phone}
             save_data(data["students"], data["records"])
             flash(f"학생 '{name}'이(가) 추가되었습니다.", "success")
         return redirect(url_for("admin_students"))
@@ -1580,6 +1582,7 @@ def admin_student_edit(code):
         new_name = request.form.get("student_name", "").strip()
         new_pin = request.form.get("pin", "").strip()
         new_parent = request.form.get("parent", "").strip()
+        new_phone = request.form.get("phone", "").strip()
 
         if not new_code or not new_name:
             flash("학생코드와 이름은 필수입니다.", "error")
@@ -1595,7 +1598,7 @@ def admin_student_edit(code):
                 if r["student_code"] == code:
                     r["student_code"] = new_code
 
-        data["students"][new_code] = {"name": new_name, "pin": new_pin, "parent": new_parent}
+        data["students"][new_code] = {"name": new_name, "pin": new_pin, "parent": new_parent, "phone": new_phone}
         save_data(data["students"], data["records"])
         flash("학생 정보가 수정되었습니다.", "success")
         return redirect(url_for("admin_students"))
@@ -1822,6 +1825,7 @@ def admin_retakes():
                 "name": student.get("name", "?"),
                 "pin": student.get("pin", ""),
                 "parent": student.get("parent", ""),
+                "phone": student.get("phone", ""),
                 "items": retake_items,
                 "pending_count": pending,
                 "total_count": len(retake_items),
@@ -2159,9 +2163,9 @@ def download_template():
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
-    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)"])
-    ws1.append(["S001", "김민지", "1234", "김민지 어머니"])
-    ws1.append(["S002", "이도윤", "5678", "이도윤 어머니"])
+    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)", "전화번호(선택)"])
+    ws1.append(["S001", "김민지", "1234", "김민지 어머니", "010-1234-5678"])
+    ws1.append(["S002", "이도윤", "5678", "이도윤 어머니", "010-5555-6666"])
 
     ws2 = wb.create_sheet("기록")
     ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료", "학기/과정"])
@@ -2181,7 +2185,7 @@ def download_template():
     ws3.append(["한마디", "S001", "김민지", "단어시험 1등 축하해요. 다음주도 기대할게요!", "게시"])
 
     for ws, widths in [
-        (ws1, [10, 12, 8, 18]),
+        (ws1, [10, 12, 8, 18, 16]),
         (ws2, [12, 10, 12, 14, 8, 40, 12, 8, 14]),
         (ws3, [14, 14, 12, 50, 10]),
     ]:

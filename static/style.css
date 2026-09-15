@@ -688,6 +688,43 @@ pre {
   background: #fee2e2;
   color: #991b1b;
 }
+.sms-btn {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #78350f;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid #f59e0b;
+  transition: all 0.15s;
+}
+.sms-btn:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+}
+.phone-missing {
+  color: #b91c1c;
+  font-style: italic;
+  font-weight: 600;
+}
+.sms-btn-sample {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #78350f;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid #f59e0b;
+}
+.messaging-info ul {
+  margin: 6px 0 10px 20px;
+}
 .test-type-badge {
   display: inline-block;
   padding: 2px 8px;
