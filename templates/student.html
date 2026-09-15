@@ -57,7 +57,6 @@
   <h2>📖 보인고 스타일 단어 TEST
     <span class="vocab-progress-tag">
       {{ word_tests_done }} / {{ word_tests_total }}회 완료
-      ({{ ((word_tests_done / word_tests_total) * 100) | round | int }}%)
     </span>
   </h2>
   <table class="records vocab-tests">
@@ -65,29 +64,45 @@
       <tr>
         <th style="width:110px">회차</th>
         <th style="width:70px">문제수</th>
-        <th style="width:100px">상태</th>
+        <th style="width:150px">응시일</th>
+        <th style="width:105px">상태</th>
         <th style="width:70px">점수</th>
-        <th style="width:130px">완료 요망 일자</th>
+        <th style="width:100px">응시자 평균</th>
+        <th style="width:125px">완료 요망 일자</th>
         <th style="width:110px">재시험</th>
-        <th style="width:105px">응시일</th>
         <th>피드백</th>
       </tr>
     </thead>
     <tbody>
       {% for t in word_tests %}
-      <tr class="vocab-row {% if t.completed and not t.needs_retake %}vocab-done{% elif t.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
+      <tr class="vocab-row {% if t.status == '응시완료' %}vocab-done{% elif t.status == '미응시' %}vocab-incomplete{% else %}vocab-pending{% endif %}">
         <td><b>{{ t.label }}</b></td>
         <td><code class="vocab-range">{{ t.questions or '—' }}문제</code></td>
         <td>
-          {% if t.completed %}
-          <span class="vocab-status-done">✅ 응시 완료</span>
-          {% elif t.has_record %}
-          <span class="vocab-status-incomplete">📝 응시 미완료</span>
+          {% if t.test_date_display %}
+          <span class="test-date-display">{{ t.test_date_display }}</span>
           {% else %}
-          <span class="vocab-status-pending">⏳ 미응시</span>
+          <span class="muted small">—</span>
           {% endif %}
         </td>
-        <td class="score">{{ t.score if t.has_record else '—' }}</td>
+        <td>
+          {% if t.status == '응시완료' %}
+          <span class="vocab-status-done">✅ 응시완료</span>
+          {% elif t.status == '미응시' %}
+          <span class="vocab-status-pending">⏳ 미응시</span>
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td class="score">{{ t.score if t.has_score else '—' }}</td>
+        <td>
+          {% if t.class_avg is not none %}
+          <b>{{ t.class_avg }}</b>점
+          <br><small class="muted">({{ t.class_count }}명)</small>
+          {% else %}
+          <span class="muted small">—</span>
+          {% endif %}
+        </td>
         <td>
           {% if t.deadline %}
           <span class="deadline-badge">📅 {{ t.deadline }}</span>
@@ -107,21 +122,11 @@
             <span class="muted small">—</span>
           {% endif %}
         </td>
-        <td>{{ t.date or '—' }}</td>
         <td class="feedback">{{ t.feedback or '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  {% if word_tests_done == word_tests_total %}
-  <p class="vocab-summary all-done">🎉 모든 회차 완료! 수고했어요.</p>
-  {% else %}
-  <p class="vocab-summary">남은 회차:
-    {% for t in word_tests if not t.completed %}
-      <span class="vocab-pending-badge">{{ t.label }} ({{ t.questions }}문제)</span>
-    {% endfor %}
-  </p>
-  {% endif %}
 </section>
 
 {% if legacy_word_tests %}

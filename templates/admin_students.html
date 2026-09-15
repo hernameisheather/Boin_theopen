@@ -29,8 +29,12 @@
         <input type="text" name="parent" placeholder="예: 김민지 어머니">
       </label>
       <label>
-        <span>📱 전화번호(선택)</span>
-        <input type="tel" name="phone" placeholder="예: 010-1234-5678">
+        <span>📱 학생 전화번호(선택)</span>
+        <input type="tel" name="phone" placeholder="예: 010-1111-2222">
+      </label>
+      <label>
+        <span>📱 학부모 전화번호(선택)</span>
+        <input type="tel" name="parent_phone" placeholder="예: 010-1234-5678">
       </label>
     </div>
     <button type="submit" class="btn-primary">학생 추가</button>
@@ -52,7 +56,8 @@
         <th>이름</th>
         <th>PIN</th>
         <th>학부모</th>
-        <th>📱 전화번호</th>
+        <th>📱 학생번호</th>
+        <th>📱 학부모번호</th>
         <th style="width:90px">작업</th>
       </tr>
     </thead>
@@ -64,6 +69,7 @@
         <td><code>{{ s.pin or '—' }}</code></td>
         <td>{{ s.parent or '—' }}</td>
         <td>{% if s.phone %}<code>{{ s.phone }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if s.parent_phone %}<code>{{ s.parent_phone }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>
           <a href="{{ url_for('admin_student_edit', code=code) }}" class="btn-mini">수정</a>
         </td>

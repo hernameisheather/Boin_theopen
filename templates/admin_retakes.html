@@ -74,16 +74,25 @@
     <span class="retake-summary-tag">
       미완료 <b>{{ s.pending_count }}</b> / 전체 {{ s.total_count }}건
     </span>
-    {% if s.phone_raw and s.pending_count > 0 %}
-      <a href="sms:{{ s.phone_raw }}?body={{ s.sms_body_encoded }}"
-         class="sms-btn" title="Phone Link/문자앱 열기 (수신자·본문 자동 입력)">
-        📱 문자 보내기
+    {% if s.pending_count > 0 %}
+      {% if s.student_phone_raw %}
+      <a href="sms:{{ s.student_phone_raw }}?body={{ s.sms_body_student_encoded }}"
+         class="sms-btn sms-btn-student" title="학생 본인에게 문자 전송">
+        📱 학생에게
       </a>
+      {% endif %}
+      {% if s.parent_phone_raw %}
+      <a href="sms:{{ s.parent_phone_raw }}?body={{ s.sms_body_parent_encoded }}"
+         class="sms-btn sms-btn-parent" title="어머님(학부모)에게 문자 전송">
+        📱 어머님에게
+      </a>
+      {% endif %}
     {% endif %}
   </h2>
   <p class="muted small">
     {% if s.parent %}학부모: {{ s.parent }}{% endif %}
-    {% if s.phone %} · 📱 <code>{{ s.phone }}</code>{% else %} · <span class="phone-missing">📱 번호 미등록</span>{% endif %}
+    · 📱 학생 {% if s.phone %}<code>{{ s.phone }}</code>{% else %}<span class="phone-missing">미등록</span>{% endif %}
+    · 📱 어머님 {% if s.parent_phone %}<code>{{ s.parent_phone }}</code>{% else %}<span class="phone-missing">미등록</span>{% endif %}
   </p>
   <table class="records">
     <thead>

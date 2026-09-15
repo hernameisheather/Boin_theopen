@@ -74,8 +74,13 @@ def _parse_workbook(wb):
             pin = str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
             parent = str(row[3]).strip() if len(row) > 3 and row[3] else ""
             phone = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+            parent_phone = str(row[5]).strip() if len(row) > 5 and row[5] else ""
             if code:
-                students[code] = {"name": name, "pin": pin, "parent": parent, "phone": phone}
+                students[code] = {
+                    "name": name, "pin": pin, "parent": parent,
+                    "phone": phone,               # 학생 본인 전화번호
+                    "parent_phone": parent_phone, # 학부모(어머님) 전화번호
+                }
 
     records = []
     if "기록" in wb.sheetnames:
@@ -279,9 +284,12 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
-    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)", "전화번호(선택)"])
+    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)", "학생전화번호(선택)", "학부모전화번호(선택)"])
     for code, s in students.items():
-        ws1.append([code, s.get("name", ""), s.get("pin", ""), s.get("parent", ""), s.get("phone", "")])
+        ws1.append([
+            code, s.get("name", ""), s.get("pin", ""), s.get("parent", ""),
+            s.get("phone", ""), s.get("parent_phone", ""),
+        ])
 
     ws2 = wb.create_sheet("기록")
     ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료", "학기/과정"])
@@ -322,7 +330,7 @@ def save_data(students=None, records=None, homeworks=None, messages=None):
         ])
 
     for ws, widths in [
-        (ws1, [10, 12, 8, 18, 16]),
+        (ws1, [10, 12, 8, 18, 16, 16]),
         (ws2, [12, 10, 12, 14, 8, 40, 12, 8, 14]),
         (ws3, [14, 14, 12, 50, 10]),
     ]:
@@ -393,29 +401,52 @@ LEGACY_WORD_ROUNDS = [
 WORD_TEST_ROUNDS = BOINGO_WORD_ROUNDS
 
 
-# ─── 시험별 완료 요망 일자 관리 ────────────────────────
+# ─── 시험별 완료 요망 일자 + 시행일 관리 ────────────────
 TEST_DEADLINES_FILE = os.path.join(DATA_DIR, "test_deadlines.json")
+SCHOOLS = ["청담", "대찬"]
+
+# 학생 코드로 학교 판별: 7자리 숫자=청담, 그 외=대찬
+def infer_school(code):
+    if not code:
+        return "청담"
+    if str(code).isdigit() and len(str(code)) == 7:
+        return "청담"
+    if str(code).isdigit() and 3 <= len(str(code)) <= 5:
+        return "대찬"
+    return "청담"
 
 
 def load_test_deadlines():
-    """{'day_31_37': 'YYYY-MM-DD', ...} 반환. 파일 없으면 빈 dict."""
+    """중첩 구조 반환:
+    {'day_31_37': {'deadline': 'YYYY-MM-DD', 'test_dates': {'청담': 'YYYY-MM-DD', '대찬': ''}}, ...}
+    구형 flat 형식({'day_31_37': '2026-09-20'})도 자동 변환.
+    """
     import json
     if not os.path.exists(TEST_DEADLINES_FILE):
         return {}
     try:
         with open(TEST_DEADLINES_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return {str(k): str(v) for k, v in data.items()}
+        result = {}
+        for k, v in data.items():
+            if isinstance(v, str):
+                result[str(k)] = {"deadline": v, "test_dates": {}}
+            elif isinstance(v, dict):
+                result[str(k)] = {
+                    "deadline": str(v.get("deadline", "")),
+                    "test_dates": {sc: str(v.get("test_dates", {}).get(sc, "")) for sc in SCHOOLS},
+                }
+        return result
     except Exception as e:
         print(f"[WARN] Load deadlines failed: {e}")
         return {}
 
 
-def save_test_deadlines(deadlines):
+def save_test_deadlines(config):
     import json
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(TEST_DEADLINES_FILE, "w", encoding="utf-8") as f:
-        json.dump(deadlines, f, ensure_ascii=False, indent=2)
+        json.dump(config, f, ensure_ascii=False, indent=2)
 
 
 def _record_matches_round(record, range_str):
@@ -728,7 +759,7 @@ def grade_retake(answers):
 
 
 def _build_word_test_row(round_info, student_records, deadlines=None):
-    """단일 회차의 상태 정보를 계산 (내부 헬퍼)."""
+    """단일 회차의 상태 정보를 계산 (내부 헬퍼, legacy용)."""
     matching = [r for r in student_records
                 if _record_matches_round(r, round_info["range"])]
     matching.sort(key=lambda r: r.get("date", ""), reverse=True)
@@ -737,7 +768,6 @@ def _build_word_test_row(round_info, student_records, deadlines=None):
     numeric_score = _parse_score(score_text) if score_text else None
     has_record = latest is not None
     completed = has_record and _is_word_test_completed(score_text)
-    # 재시험 필요 판단
     needs_retake = False
     retake_reason = ""
     if not has_record:
@@ -753,6 +783,8 @@ def _build_word_test_row(round_info, student_records, deadlines=None):
     deadline = ""
     if deadlines and "key" in round_info:
         deadline = deadlines.get(round_info["key"], "")
+        if isinstance(deadline, dict):
+            deadline = deadline.get("deadline", "")
     return {
         "label": round_info["label"],
         "range": round_info["range"],
@@ -771,9 +803,126 @@ def _build_word_test_row(round_info, student_records, deadlines=None):
     }
 
 
-def compute_boingo_word_test_status(student_records, deadlines=None):
-    """보인고 스타일 단어 TEST (Day 31-37, Day 38-45) 상태 — 전체 학생 표시용."""
-    return [_build_word_test_row(r, student_records, deadlines) for r in BOINGO_WORD_ROUNDS]
+def _format_mmdd(date_str):
+    """'2026-09-11' → '09/11'."""
+    if not date_str:
+        return ""
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        return f"{d.month:02d}/{d.day:02d}"
+    except (ValueError, TypeError):
+        return date_str
+
+
+def _build_boingo_word_test_row(round_info, student_code, student_records, all_records, config):
+    """보인고 단어 TEST 회차별 정보 계산 — 상태·평균·시행일 포함."""
+    round_key = round_info["key"]
+    round_range = round_info["range"]
+    round_config = config.get(round_key, {}) if isinstance(config.get(round_key), dict) else {}
+    deadline = round_config.get("deadline", "")
+    test_dates = round_config.get("test_dates", {})
+
+    # 이 학생의 기록
+    matching = [r for r in student_records
+                if _record_matches_round(r, round_range)]
+    matching.sort(key=lambda r: r.get("date", ""), reverse=True)
+    latest = matching[0] if matching else None
+    score_text = latest.get("score", "") if latest else ""
+    numeric_score = _parse_score(score_text) if score_text else None
+    has_score = numeric_score is not None
+
+    # 학생 학교
+    school = infer_school(student_code)
+    student_test_date_str = test_dates.get(school, "")
+
+    # 상태 판단
+    status = "-"
+    if has_score:
+        status = "응시완료"
+    elif student_test_date_str:
+        try:
+            test_date = datetime.strptime(student_test_date_str, "%Y-%m-%d").date()
+            today = datetime.now().date()
+            if today >= test_date:
+                # 시행일 지남 — 같은 학교의 다른 학생이 점수 있는지 확인
+                for r in all_records:
+                    other_code = r.get("student_code", "")
+                    if other_code == student_code:
+                        continue
+                    if infer_school(other_code) != school:
+                        continue
+                    if not _record_matches_round(r, round_range):
+                        continue
+                    if _parse_score(r.get("score", "")) is not None:
+                        status = "미응시"
+                        break
+        except ValueError:
+            pass
+
+    # 전체 응시자 평균 (응시자만, 학생별 최고점)
+    student_bests = {}
+    for r in all_records:
+        if not _record_matches_round(r, round_range):
+            continue
+        s = _parse_score(r.get("score", ""))
+        if s is None:
+            continue
+        c = r.get("student_code", "")
+        if c not in student_bests or s > student_bests[c]:
+            student_bests[c] = s
+    class_avg = round(sum(student_bests.values()) / len(student_bests), 1) if student_bests else None
+    class_count = len(student_bests)
+
+    # 시행일 표시: "청담 09/11 · 대찬 09/13"
+    parts = []
+    for sc in SCHOOLS:
+        d = test_dates.get(sc, "")
+        if d:
+            parts.append(f"{sc} {_format_mmdd(d)}")
+    test_date_display = " · ".join(parts) if parts else ""
+
+    # 재시험
+    needs_retake = False
+    retake_reason = ""
+    if status == "미응시":
+        needs_retake = True
+        retake_reason = "미응시"
+    elif has_score and numeric_score <= 80:
+        needs_retake = True
+        val = int(numeric_score) if numeric_score == int(numeric_score) else numeric_score
+        retake_reason = f"{val}점 (≤80)"
+    retake_taken = latest.get("resolved", False) if latest else False
+
+    return {
+        "label": round_info["label"],
+        "range": round_range,
+        "questions": round_info.get("questions"),
+        "deadline": deadline,
+        "test_date_display": test_date_display,
+        "school": school,
+        "status": status,
+        "score": score_text,
+        "numeric_score": numeric_score,
+        "class_avg": class_avg,
+        "class_count": class_count,
+        "has_record": latest is not None,
+        "has_score": has_score,
+        "completed": has_score,  # 하위 호환
+        "date": latest.get("date") if latest else None,
+        "feedback": latest.get("feedback") if latest else None,
+        "needs_retake": needs_retake,
+        "retake_reason": retake_reason,
+        "retake_taken": retake_taken,
+    }
+
+
+def compute_boingo_word_test_status(student_records, deadlines=None, student_code=None, all_records=None):
+    """보인고 스타일 단어 TEST 상태 — 상태/평균/시행일 포함."""
+    config = deadlines if isinstance(deadlines, dict) else {}
+    return [
+        _build_boingo_word_test_row(r, student_code, student_records, all_records or student_records, config)
+        for r in BOINGO_WORD_ROUNDS
+    ]
 
 
 def compute_legacy_word_test_status(student_records):
@@ -1159,7 +1308,11 @@ def my_page():
     # zone 계산 (모두 학기 필터된 items 기준)
     # 보인고 스타일 단어 TEST (Day 31-37, Day 38-45) — 전체 학생
     deadlines = load_test_deadlines()
-    word_tests = compute_boingo_word_test_status(items, deadlines)
+    # 전체 반 학생 기록 (평균/상태 계산용): 2학기 정규반 전체
+    all_term_records = [r for r in data["records"] if _term_of(r) == selected_term]
+    word_tests = compute_boingo_word_test_status(
+        items, deadlines, student_code=code, all_records=all_term_records
+    )
     word_tests_done = sum(1 for t in word_tests if t["completed"])
     word_tests_total = len(word_tests)
 
@@ -1437,20 +1590,26 @@ def admin_logout():
 @admin_required
 def admin_deadlines():
     if request.method == "POST":
-        deadlines = {}
+        config = {}
         for round_info in BOINGO_WORD_ROUNDS:
             key = round_info["key"]
-            value = request.form.get(f"deadline_{key}", "").strip()
-            deadlines[key] = value
-        save_test_deadlines(deadlines)
-        flash("완료 요망 일자가 저장되었습니다.", "success")
+            entry = {
+                "deadline": request.form.get(f"deadline_{key}", "").strip(),
+                "test_dates": {},
+            }
+            for sc in SCHOOLS:
+                entry["test_dates"][sc] = request.form.get(f"testdate_{key}_{sc}", "").strip()
+            config[key] = entry
+        save_test_deadlines(config)
+        flash("완료 요망 일자·시행일이 저장되었습니다.", "success")
         return redirect(url_for("admin_deadlines"))
 
-    deadlines = load_test_deadlines()
+    config = load_test_deadlines()
     return render_template(
         "admin_deadlines.html",
         rounds=BOINGO_WORD_ROUNDS,
-        deadlines=deadlines,
+        config=config,
+        schools=SCHOOLS,
     )
 
 
@@ -1631,13 +1790,17 @@ def admin_students():
         pin = request.form.get("pin", "").strip()
         parent = request.form.get("parent", "").strip()
         phone = request.form.get("phone", "").strip()
+        parent_phone = request.form.get("parent_phone", "").strip()
 
         if not code or not name:
             flash("학생코드와 이름은 필수입니다.", "error")
         elif code in data["students"]:
             flash(f"학생코드 '{code}'는 이미 사용 중입니다.", "error")
         else:
-            data["students"][code] = {"name": name, "pin": pin, "parent": parent, "phone": phone}
+            data["students"][code] = {
+                "name": name, "pin": pin, "parent": parent,
+                "phone": phone, "parent_phone": parent_phone,
+            }
             save_data(data["students"], data["records"])
             flash(f"학생 '{name}'이(가) 추가되었습니다.", "success")
         return redirect(url_for("admin_students"))
@@ -1668,6 +1831,7 @@ def admin_student_edit(code):
         new_pin = request.form.get("pin", "").strip()
         new_parent = request.form.get("parent", "").strip()
         new_phone = request.form.get("phone", "").strip()
+        new_parent_phone = request.form.get("parent_phone", "").strip()
 
         if not new_code or not new_name:
             flash("학생코드와 이름은 필수입니다.", "error")
@@ -1683,7 +1847,10 @@ def admin_student_edit(code):
                 if r["student_code"] == code:
                     r["student_code"] = new_code
 
-        data["students"][new_code] = {"name": new_name, "pin": new_pin, "parent": new_parent, "phone": new_phone}
+        data["students"][new_code] = {
+            "name": new_name, "pin": new_pin, "parent": new_parent,
+            "phone": new_phone, "parent_phone": new_parent_phone,
+        }
         save_data(data["students"], data["records"])
         flash("학생 정보가 수정되었습니다.", "success")
         return redirect(url_for("admin_students"))
@@ -1908,29 +2075,45 @@ def admin_retakes():
         if retake_items:
             pending = sum(1 for it in retake_items if not it["retake_taken"])
             # SMS 본문 미리 계산 (템플릿 로직 단순화)
-            phone_raw = (student.get("phone") or "").replace("-", "").replace(" ", "")
-            sms_body = ""
-            sms_body_encoded = ""
-            if phone_raw and pending > 0:
+            student_phone_raw = (student.get("phone") or "").replace("-", "").replace(" ", "")
+            parent_phone_raw = (student.get("parent_phone") or "").replace("-", "").replace(" ", "")
+            sms_body_student = ""
+            sms_body_parent = ""
+            sms_body_student_encoded = ""
+            sms_body_parent_encoded = ""
+            if pending > 0:
                 pending_lines = [
                     f"· {it['type']} {it['label']}"
                     for it in retake_items if not it["retake_taken"]
                 ]
-                sms_body = (
-                    f"[신쌤] {student.get('name', '?')} 학생 재시험 안내:\n"
+                name_disp = student.get('name', '?')
+                # 학생 본인용
+                sms_body_student = (
+                    f"[신쌤] {name_disp}, 재시험 안내:\n"
                     + "\n".join(pending_lines)
-                    + "\n\n재시험 일정 확인 부탁드립니다."
+                    + "\n\n재시험 일정 확인 후 응시 부탁드립니다."
                 )
-                sms_body_encoded = url_quote(sms_body, safe="")
+                # 어머님용
+                sms_body_parent = (
+                    f"[신쌤] {name_disp} 학생 어머님, 재시험 안내드립니다:\n"
+                    + "\n".join(pending_lines)
+                    + "\n\n재시험 일정 확인 부탁드립니다. 감사합니다."
+                )
+                sms_body_student_encoded = url_quote(sms_body_student, safe="")
+                sms_body_parent_encoded = url_quote(sms_body_parent, safe="")
             students_data.append({
                 "code": code,
                 "name": student.get("name", "?"),
                 "pin": student.get("pin", ""),
                 "parent": student.get("parent", ""),
                 "phone": student.get("phone", ""),
-                "phone_raw": phone_raw,
-                "sms_body": sms_body,
-                "sms_body_encoded": sms_body_encoded,
+                "parent_phone": student.get("parent_phone", ""),
+                "student_phone_raw": student_phone_raw,
+                "parent_phone_raw": parent_phone_raw,
+                "sms_body_student": sms_body_student,
+                "sms_body_parent": sms_body_parent,
+                "sms_body_student_encoded": sms_body_student_encoded,
+                "sms_body_parent_encoded": sms_body_parent_encoded,
                 "retake_items": retake_items,
                 "pending_count": pending,
                 "total_count": len(retake_items),
@@ -2291,9 +2474,9 @@ def download_template():
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "학생명단"
-    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)", "전화번호(선택)"])
-    ws1.append(["S001", "김민지", "1234", "김민지 어머니", "010-1234-5678"])
-    ws1.append(["S002", "이도윤", "5678", "이도윤 어머니", "010-5555-6666"])
+    ws1.append(["학생코드", "학생이름", "PIN", "학부모이름(선택)", "학생전화번호(선택)", "학부모전화번호(선택)"])
+    ws1.append(["S001", "김민지", "1234", "김민지 어머니", "010-1111-2222", "010-1234-5678"])
+    ws1.append(["S002", "이도윤", "5678", "이도윤 어머니", "010-3333-4444", "010-5555-6666"])
 
     ws2 = wb.create_sheet("기록")
     ws2.append(["날짜", "학생코드", "학생이름", "항목", "점수", "피드백", "비고", "완료", "학기/과정"])
@@ -2313,7 +2496,7 @@ def download_template():
     ws3.append(["한마디", "S001", "김민지", "단어시험 1등 축하해요. 다음주도 기대할게요!", "게시"])
 
     for ws, widths in [
-        (ws1, [10, 12, 8, 18, 16]),
+        (ws1, [10, 12, 8, 18, 16, 16]),
         (ws2, [12, 10, 12, 14, 8, 40, 12, 8, 14]),
         (ws3, [14, 14, 12, 50, 10]),
     ]:
@@ -2372,6 +2555,50 @@ def run_one_time_term_migration():
 
 # 앱 import 시점에 마이그레이션 실행
 run_one_time_term_migration()
+
+
+# ─── 시험 config 초기값 부트스트랩 ────────────────────────
+_TEST_CONFIG_BOOTSTRAP_MARKER = os.path.join(DATA_DIR, ".test_config_bootstrap_v1.json")
+
+
+def run_test_config_bootstrap():
+    import json
+    if os.path.exists(_TEST_CONFIG_BOOTSTRAP_MARKER):
+        return
+    try:
+        config = load_test_deadlines()
+        changed = False
+
+        def ensure(round_key, deadline, test_dates):
+            nonlocal changed
+            if round_key not in config:
+                config[round_key] = {"deadline": deadline, "test_dates": dict(test_dates)}
+                changed = True
+                return
+            entry = config[round_key]
+            if not entry.get("deadline"):
+                entry["deadline"] = deadline
+                changed = True
+            td = entry.setdefault("test_dates", {})
+            for sc, d in test_dates.items():
+                if not td.get(sc):
+                    td[sc] = d
+                    changed = True
+
+        ensure("day_31_37", "2026-09-20", {"청담": "2026-09-11", "대찬": "2026-09-13"})
+        ensure("day_38_45", "2026-09-27", {})
+
+        if changed:
+            save_test_deadlines(config)
+        os.makedirs(os.path.dirname(_TEST_CONFIG_BOOTSTRAP_MARKER), exist_ok=True)
+        with open(_TEST_CONFIG_BOOTSTRAP_MARKER, "w", encoding="utf-8") as f:
+            json.dump({"ran_at": datetime.now().isoformat()}, f)
+        print(f"[INFO] Test config bootstrap done (changed={changed})")
+    except Exception as e:
+        print(f"[WARN] Test config bootstrap failed: {e}")
+
+
+run_test_config_bootstrap()
 
 
 # ─── 메인 ────────────────────────────────────────────────────

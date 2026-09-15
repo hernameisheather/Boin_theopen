@@ -1,45 +1,38 @@
 {% extends "base.html" %}
-{% block title %}완료 요망 일자 관리{% endblock %}
+{% block title %}완료 일자 & 시행일 관리{% endblock %}
 {% block content %}
 {% include "_admin_nav.html" %}
 
 <header class="page-header">
   <div>
-    <h1>📅 단어 TEST 완료 요망 일자</h1>
-    <p class="muted small">각 회차별 학생 완료 요망 일자를 설정하세요. 학부모 페이지에 표시됩니다.</p>
+    <h1>📅 단어 TEST 완료 요망 일자 & 시행일</h1>
+    <p class="muted small">각 회차별 학교 시행일과 완료 요망 일자를 설정하세요. 학부모 페이지에 표시됩니다.</p>
   </div>
 </header>
 
 <section class="card">
   <form method="post" class="form">
-    <table class="records">
-      <thead>
-        <tr>
-          <th style="width:160px">회차</th>
-          <th style="width:100px">문제 수</th>
-          <th style="width:120px">범위</th>
-          <th>완료 요망 일자</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rounds %}
-        <tr>
-          <td><b>{{ r.label }}</b></td>
-          <td>{{ r.questions }}문제</td>
-          <td><code>{{ r.range }}</code></td>
-          <td>
-            <input type="date" name="deadline_{{ r.key }}"
-                   value="{{ deadlines.get(r.key, '') }}"
-                   style="padding:8px 12px; border:1px solid #e5e7eb; border-radius:6px;">
-            {% if deadlines.get(r.key) %}
-            <button type="submit" formaction="{{ url_for('admin_deadlines') }}?clear={{ r.key }}"
-                    class="btn-mini" style="margin-left:8px;">지우기</button>
-            {% endif %}
-          </td>
-        </tr>
+    {% for r in rounds %}
+    {% set entry = config.get(r.key, {}) %}
+    {% set test_dates = entry.get('test_dates', {}) %}
+    <div class="deadline-round-block">
+      <h3>{{ r.label }} <span class="muted small">({{ r.questions }}문제, 범위 {{ r.range }})</span></h3>
+      <div class="form-row">
+        {% for sc in schools %}
+        <label>
+          <span>{{ sc }} 시행일</span>
+          <input type="date" name="testdate_{{ r.key }}_{{ sc }}"
+                 value="{{ test_dates.get(sc, '') }}">
+        </label>
         {% endfor %}
-      </tbody>
-    </table>
+        <label>
+          <span>완료 요망 일자</span>
+          <input type="date" name="deadline_{{ r.key }}"
+                 value="{{ entry.get('deadline', '') }}">
+        </label>
+      </div>
+    </div>
+    {% endfor %}
     <div class="form-actions" style="margin-top:16px;">
       <button type="submit" class="btn-primary">💾 저장</button>
     </div>
@@ -49,9 +42,10 @@
 <section class="card info">
   <h2>📌 안내</h2>
   <ul>
-    <li>완료 요망 일자를 설정하면 학부모 페이지 <b>📖 보인고 스타일 단어 TEST</b> 표에 파란 뱃지로 표시됩니다.</li>
-    <li>빈 값으로 두면 해당 회차는 일자 표시 없이 <b>—</b>로 나옵니다.</li>
-    <li>날짜는 <b>YYYY-MM-DD</b> 형식 (달력 클릭으로 선택).</li>
+    <li><b>시행일</b>: 각 학교(청담/대찬)에서 실제 시험을 치르는 날짜. 학부모 페이지 응시일 컬럼에 표시됩니다.</li>
+    <li><b>완료 요망 일자</b>: 학생 완료 목표 일자. 파란 뱃지로 표시됩니다.</li>
+    <li>비워두면 해당 값은 <b>—</b>로 표시됩니다.</li>
+    <li>상태(응시완료/–/미응시)는 시행일 기준으로 자동 계산됩니다.</li>
   </ul>
 </section>
 {% endblock %}

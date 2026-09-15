@@ -28,8 +28,12 @@
         <input type="text" name="parent" value="{{ student.parent }}">
       </label>
       <label>
-        <span>📱 전화번호(선택)</span>
-        <input type="tel" name="phone" value="{{ student.phone or '' }}" placeholder="예: 010-1234-5678">
+        <span>📱 학생 전화번호(선택)</span>
+        <input type="tel" name="phone" value="{{ student.phone or '' }}" placeholder="예: 010-1111-2222">
+      </label>
+      <label>
+        <span>📱 학부모 전화번호(선택)</span>
+        <input type="tel" name="parent_phone" value="{{ student.parent_phone or '' }}" placeholder="예: 010-1234-5678">
       </label>
     </div>
     <p class="hint">⚠️ 학생코드를 변경하면 이 학생의 모든 기존 기록도 자동으로 새 코드로 업데이트됩니다.</p>
