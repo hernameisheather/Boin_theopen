@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}재시험 대상자{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <div>
+    <h1>🔄 재시험 대상자 관리</h1>
+    <p class="muted small">
+      단어시험/Review test에서 <b>80점 이하</b>·<b>미응시</b>·<b>미완료</b> 학생 자동 감지
+      (2학기 정규반 기준)
+    </p>
+  </div>
+</header>
+
+<section class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-cat">대상 학생</div>
+    <div class="stat-avg">{{ students_data|length }}<span class="stat-unit">명</span></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-cat">전체 재시험</div>
+    <div class="stat-avg">{{ total_items }}<span class="stat-unit">건</span></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-cat">미완료 재시험</div>
+    <div class="stat-avg" style="color:#dc2626;">{{ total_pending }}<span class="stat-unit">건</span></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>📢 카톡/문자 자동 발송 방법</h2>
+  <div class="messaging-info">
+    <p><b>정확히 말씀드리면:</b> 카카오톡 개인 대화를 자동으로 보내는 공식 API는 <b>존재하지 않습니다</b>.
+      카톡은 개인 프라이버시를 이유로 서드파티 자동화를 막고 있어요.</p>
+
+    <p><b>실용적 대안 3가지:</b></p>
+    <ol>
+      <li><b>알림톡 (카톡 비즈니스)</b> — Aligo, NHN 클라우드, 솔라피 등 — 유료(건당 8~15원), 사업자등록 + 템플릿 승인 필요 (2~5일 소요)</li>
+      <li><b>SMS 발송 API</b> — CoolSMS, Aligo — 유료(건당 15~30원), 즉시 사용 가능. 전화번호만 있으면 OK</li>
+      <li><b>수동 복사</b> — 아래 <b>[전체 메시지 복사]</b> 버튼으로 재시험 대상 학생 명단·메시지를 한 번에 클립보드에 복사 → 카톡 단체방/개인방에 붙여넣기 (<b>0원, 즉시 가능</b>)</li>
+    </ol>
+
+    <p class="muted small">💡 관리자님이 직접 카톡을 보내시는 경우 옵션 3이 가장 빠르고 무료입니다.
+       추후 자동화가 필요하시면 옵션 1·2 도입 시 API 연동 코드 작성해드릴 수 있어요.</p>
+  </div>
+
+  <div class="messaging-actions">
+    <button type="button" onclick="copyAllRetakeMessage()" class="btn-primary">
+      📋 전체 재시험 명단 메시지 복사
+    </button>
+    <span id="copy-status" class="muted small"></span>
+  </div>
+</section>
+
+{% if not students_data %}
+<section class="card empty">
+  <p>🎉 현재 재시험 대상 학생이 없습니다.</p>
+</section>
+{% else %}
+
+{% for s in students_data %}
+<section class="card retake-student-card {% if s.pending_count > 0 %}retake-pending-card{% endif %}">
+  <h2>
+    <b>{{ s.name }}</b>
+    <code class="muted small">{{ s.code }}</code>
+    <span class="retake-summary-tag">
+      미완료 <b>{{ s.pending_count }}</b> / 전체 {{ s.total_count }}건
+    </span>
+  </h2>
+  {% if s.parent %}
+  <p class="muted small">학부모: {{ s.parent }}</p>
+  {% endif %}
+  <table class="records">
+    <thead>
+      <tr>
+        <th style="width:100px">종류</th>
+        <th style="width:170px">시험</th>
+        <th style="width:80px">점수</th>
+        <th style="width:140px">사유</th>
+        <th style="width:110px">최근 응시일</th>
+        <th style="width:180px">재시험 응시</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in s.items %}
+      <tr class="{% if it.retake_taken %}retake-row-done{% else %}retake-row-pending{% endif %}">
+        <td>
+          <span class="test-type-badge {% if it.type == '단어시험' %}type-vocab{% else %}type-review{% endif %}">
+            {{ it.type }}
+          </span>
+        </td>
+        <td><b>{{ it.label }}</b></td>
+        <td class="score">{{ it.score }}</td>
+        <td>{{ it.reason }}</td>
+        <td>{{ it.date or '—' }}</td>
+        <td>
+          {% if it.record_idx is not none %}
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="toggle">
+            <input type="hidden" name="idx" value="{{ it.record_idx }}">
+            <button type="submit"
+                    class="{% if it.retake_taken %}toggle-o{% else %}toggle-x{% endif %}">
+              {% if it.retake_taken %}
+              🔄 응시 O (완료)
+              {% else %}
+              ❌ 응시 X (미완료)
+              {% endif %}
+            </button>
+          </form>
+          {% else %}
+          <span class="muted small">기록 없음 (응시 후 추가)</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+{% endif %}
+
+<script>
+function copyAllRetakeMessage() {
+  const lines = [
+    "📢 재시험 안내 (신쌤)",
+    "",
+  ];
+  {% for s in students_data %}
+  {% if s.pending_count > 0 %}
+  lines.push("─── {{ s.name }} 학생 ({{ s.pending_count }}건) ───");
+  {% for it in s.items if not it.retake_taken %}
+  lines.push("  · {{ it.type }} · {{ it.label }} ({{ it.reason }})");
+  {% endfor %}
+  lines.push("");
+  {% endif %}
+  {% endfor %}
+  lines.push("재시험 진행 후 응시 완료 처리는 관리자 페이지에서 O/X 토글로 변경됩니다.");
+
+  const text = lines.join("\n");
+  navigator.clipboard.writeText(text).then(function() {
+    document.getElementById('copy-status').textContent = "✅ 복사되었습니다! 카톡에 붙여넣기 하세요.";
+    document.getElementById('copy-status').style.color = "#059669";
+  }).catch(function(err) {
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    document.getElementById('copy-status').textContent = "✅ 복사되었습니다! 카톡에 붙여넣기 하세요.";
+    document.getElementById('copy-status').style.color = "#059669";
+  });
+}
+</script>
+{% endblock %}

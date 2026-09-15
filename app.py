@@ -444,6 +444,16 @@ def compute_review_test_records(student_records):
         score_text = r.get("score", "")
         numeric_score = _parse_score(score_text)
         completed = _is_word_test_completed(score_text)
+        # 재시험 필요 판단: 미완료 or 80점 이하
+        needs_retake = False
+        retake_reason = ""
+        if not completed:
+            needs_retake = True
+            retake_reason = "미완료"
+        elif numeric_score is not None and numeric_score <= 80:
+            needs_retake = True
+            retake_reason = f"{int(numeric_score) if numeric_score == int(numeric_score) else numeric_score}점 (≤80)"
+        retake_taken = r.get("resolved", False)
         result.append({
             "test_name": cat,
             "has_record": True,
@@ -452,6 +462,10 @@ def compute_review_test_records(student_records):
             "numeric_score": numeric_score,
             "date": r.get("date") or "",
             "feedback": r.get("feedback") or "",
+            "needs_retake": needs_retake,
+            "retake_reason": retake_reason,
+            "retake_taken": retake_taken,
+            "record_ref": r,  # 원본 record 참조 (관리자에서 사용)
         })
     # 날짜 내림차순(최신이 위에) 정렬
     result.sort(key=lambda x: (x["date"] or ""), reverse=True)
@@ -693,6 +707,19 @@ def compute_word_test_status(student_records):
         numeric_score = _parse_score(score_text) if score_text else None
         has_record = latest is not None
         completed = has_record and _is_word_test_completed(score_text)
+        # 재시험 필요 판단: 미응시(기록 없음) or 미완료 or 80점 이하
+        needs_retake = False
+        retake_reason = ""
+        if not has_record:
+            needs_retake = True
+            retake_reason = "미응시"
+        elif not completed:
+            needs_retake = True
+            retake_reason = "미완료"
+        elif numeric_score is not None and numeric_score <= 80:
+            needs_retake = True
+            retake_reason = f"{int(numeric_score) if numeric_score == int(numeric_score) else numeric_score}점 (≤80)"
+        retake_taken = latest.get("resolved", False) if latest else False
         result.append({
             "label": round_info["label"],
             "range": round_info["range"],
@@ -703,6 +730,9 @@ def compute_word_test_status(student_records):
             "date": latest.get("date") if latest else None,
             "feedback": latest.get("feedback") if latest else None,
             "attempts": len(matching),
+            "needs_retake": needs_retake,
+            "retake_reason": retake_reason,
+            "retake_taken": retake_taken,
         })
     return result
 
@@ -1686,6 +1716,131 @@ def admin_clinic():
     )
 
 
+# ─── 라우트: 관리자 — 재시험 대상자 모아보기 ────────────
+@app.route("/admin/retakes", methods=["GET", "POST"])
+@admin_required
+def admin_retakes():
+    data = load_data()
+
+    # POST: 재시험 응시 O/X 토글
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        if action == "toggle":
+            try:
+                idx = int(request.form.get("idx", -1))
+            except (ValueError, TypeError):
+                idx = -1
+            if 0 <= idx < len(data["records"]):
+                new_state = not data["records"][idx].get("resolved", False)
+                data["records"][idx]["resolved"] = new_state
+                save_data(data["students"], data["records"])
+                flash(f"재시험 응시: {'O (완료)' if new_state else 'X (미완료)'}", "success")
+        return redirect(url_for("admin_retakes"))
+
+    # 2학기 정규반만
+    def _term_of(r):
+        return r.get("term") or DEFAULT_TERM
+
+    # 학생별 재시험 대상 수집
+    students_data = []
+    for code, student in data["students"].items():
+        student_records = [r for r in data["records"]
+                           if r["student_code"] == code and _term_of(r) == DEFAULT_TERM]
+
+        retake_items = []
+
+        # 단어시험 회차별 체크
+        for round_info in WORD_TEST_ROUNDS:
+            matching = [r for r in student_records
+                        if _record_matches_round(r, round_info["range"])]
+            matching.sort(key=lambda r: r.get("date", ""), reverse=True)
+            latest = matching[0] if matching else None
+
+            needs = False
+            reason = ""
+            record_idx = None
+            score_text = ""
+            date_str = ""
+
+            if not latest:
+                needs = True
+                reason = "미응시"
+            else:
+                score_text = latest.get("score", "")
+                date_str = latest.get("date", "")
+                # find record index for toggle
+                try:
+                    record_idx = data["records"].index(latest)
+                except ValueError:
+                    record_idx = None
+                if not _is_word_test_completed(score_text):
+                    needs = True
+                    reason = "미완료"
+                else:
+                    numeric = _parse_score(score_text)
+                    if numeric is not None and numeric <= 80:
+                        needs = True
+                        val = int(numeric) if numeric == int(numeric) else numeric
+                        reason = f"{val}점 (≤80)"
+
+            if needs:
+                retake_items.append({
+                    "type": "단어시험",
+                    "label": f"{round_info['label']} ({round_info['range']})",
+                    "score": score_text or "—",
+                    "reason": reason,
+                    "date": date_str,
+                    "record_idx": record_idx,
+                    "retake_taken": latest.get("resolved", False) if latest else False,
+                })
+
+        # Review test 체크 (기록 있는 것만 - 미응시는 감지 불가)
+        review_records = compute_review_test_records(student_records)
+        for r in review_records:
+            if r["needs_retake"]:
+                actual_idx = None
+                for i, rec in enumerate(data["records"]):
+                    if (rec.get("student_code") == code
+                        and rec.get("category") == r["test_name"]
+                        and rec.get("date") == r["date"]):
+                        actual_idx = i
+                        break
+                retake_items.append({
+                    "type": "Review Test",
+                    "label": r["test_name"],
+                    "score": r["score"] or "—",
+                    "reason": r["retake_reason"],
+                    "date": r["date"],
+                    "record_idx": actual_idx,
+                    "retake_taken": r["retake_taken"],
+                })
+
+        if retake_items:
+            pending = sum(1 for it in retake_items if not it["retake_taken"])
+            students_data.append({
+                "code": code,
+                "name": student.get("name", "?"),
+                "pin": student.get("pin", ""),
+                "parent": student.get("parent", ""),
+                "items": retake_items,
+                "pending_count": pending,
+                "total_count": len(retake_items),
+            })
+
+    # 미완료 재시험이 많은 학생부터
+    students_data.sort(key=lambda s: (-s["pending_count"], s["name"]))
+
+    total_pending = sum(s["pending_count"] for s in students_data)
+    total_items = sum(s["total_count"] for s in students_data)
+
+    return render_template(
+        "admin_retakes.html",
+        students_data=students_data,
+        total_pending=total_pending,
+        total_items=total_items,
+    )
+
+
 # ─── 라우트: 관리자 — 시험 등수 모아보기 ──────────────────
 @app.route("/admin/rankings")
 @admin_required
@@ -1706,6 +1861,11 @@ def admin_rankings():
         t = _term_of(r)
         if t in term_counts:
             term_counts[t] += 1
+
+    # 정렬 옵션
+    sort_by = request.args.get("sort", "rank_asc")
+    if sort_by not in ("rank_asc", "rank_desc", "avg_asc", "avg_desc", "best_asc", "best_desc"):
+        sort_by = "rank_asc"
 
     # 항목별로 학생별 점수 모으기 (숫자 점수만, 선택된 학기만)
     cat_scores = defaultdict(lambda: defaultdict(list))  # cat -> {code -> [scores]}
@@ -1743,6 +1903,25 @@ def admin_rankings():
 
     # 항목명 알파벳 정렬 (한국어 가나다)
     sorted_cats = sorted(rankings.keys())
+
+    # 정렬 옵션 적용: 각 카테고리 표의 entries 재정렬
+    def _sort_key(e):
+        if sort_by == "rank_asc":
+            return (e["rank"], -e["best"], e["name"])
+        if sort_by == "rank_desc":
+            return (-e["rank"], -e["best"], e["name"])
+        if sort_by == "avg_asc":
+            return (e["avg"], e["name"])
+        if sort_by == "avg_desc":
+            return (-e["avg"], e["name"])
+        if sort_by == "best_asc":
+            return (e["best"], e["name"])
+        if sort_by == "best_desc":
+            return (-e["best"], e["name"])
+        return (e["rank"], e["name"])
+
+    for cat in rankings:
+        rankings[cat] = sorted(rankings[cat], key=_sort_key)
 
     # 종합 순위: 메달 개수 기준 (시험마다 만점 다르므로 평균 의미 없음)
     # 금=1등, 은=2등, 동=3등
@@ -1793,6 +1972,7 @@ def admin_rankings():
         selected_term=selected_term,
         term_counts=term_counts,
         default_term=DEFAULT_TERM,
+        sort_by=sort_by,
     )
 
 

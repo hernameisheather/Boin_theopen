@@ -652,6 +652,149 @@ pre {
   font-size: 0.85rem;
   font-weight: 700;
 }
+.retake-needed {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid #fca5a5;
+  animation: retake-pulse 2s ease-in-out infinite;
+}
+@keyframes retake-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+/* ─── 관리자 재시험 대상자 페이지 ───────────────────── */
+.retake-student-card {
+  border-left: 4px solid #e5e7eb;
+}
+.retake-pending-card {
+  border-left-color: #dc2626;
+  background: linear-gradient(90deg, #fef2f2 0%, white 20%);
+}
+.retake-summary-tag {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.retake-pending-card .retake-summary-tag {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.test-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.test-type-badge.type-vocab {
+  background: #eef2ff;
+  color: #3730a3;
+}
+.test-type-badge.type-review {
+  background: #f0fdf4;
+  color: #166534;
+}
+.retake-row-pending td {
+  background: rgba(220, 38, 38, 0.03);
+}
+.retake-row-done td {
+  background: rgba(16, 185, 129, 0.05);
+}
+.toggle-o, .toggle-x {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.toggle-o {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+.toggle-o:hover {
+  background: #a7f3d0;
+}
+.toggle-x {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+.toggle-x:hover {
+  background: #fecaca;
+}
+.messaging-info {
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+.messaging-info ol {
+  margin: 6px 0 10px 20px;
+}
+.messaging-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+/* ─── 정렬 컨트롤 ──────────────────────────────────── */
+.sort-controls-card {
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border: 1px solid #facc15;
+}
+.sort-controls-card h2 { color: #713f12; margin: 0 0 10px; }
+.sort-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sort-btn {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: white;
+  color: #4b5563;
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border: 1px solid #e5e7eb;
+  transition: all 0.15s;
+}
+.sort-btn:hover {
+  background: #f3f4f6;
+  text-decoration: none;
+}
+.sort-btn.active {
+  background: #4f46e5;
+  color: white;
+  border-color: #4f46e5;
+}
+
+.retake-taken {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #d1fae5;
+  color: #065f46;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid #6ee7b7;
+}
+
 .vocab-status-pending {
   display: inline-block;
   padding: 2px 10px;

@@ -41,6 +41,24 @@
 </section>
 {% else %}
 
+<section class="card sort-controls-card">
+  <h2>🔀 각 시험 표 정렬 방식</h2>
+  <div class="sort-buttons">
+    <a href="{{ url_for('admin_rankings', term=selected_term, sort='rank_asc') }}"
+       class="sort-btn {% if sort_by == 'rank_asc' %}active{% endif %}">📈 등수 낮은순 (1등부터)</a>
+    <a href="{{ url_for('admin_rankings', term=selected_term, sort='rank_desc') }}"
+       class="sort-btn {% if sort_by == 'rank_desc' %}active{% endif %}">📉 등수 높은순 (꼴등부터)</a>
+    <a href="{{ url_for('admin_rankings', term=selected_term, sort='avg_desc') }}"
+       class="sort-btn {% if sort_by == 'avg_desc' %}active{% endif %}">📊 평균 높은순</a>
+    <a href="{{ url_for('admin_rankings', term=selected_term, sort='avg_asc') }}"
+       class="sort-btn {% if sort_by == 'avg_asc' %}active{% endif %}">📊 평균 낮은순</a>
+    <a href="{{ url_for('admin_rankings', term=selected_term, sort='best_desc') }}"
+       class="sort-btn {% if sort_by == 'best_desc' %}active{% endif %}">🎯 최고점 높은순</a>
+    <a href="{{ url_for('admin_rankings', term=selected_term, sort='best_asc') }}"
+       class="sort-btn {% if sort_by == 'best_asc' %}active{% endif %}">🎯 최고점 낮은순</a>
+  </div>
+</section>
+
 {% if overall %}
 <section class="card rank-overall-card">
   <h2>🌟 종합 순위 <span class="muted small">— 메달(1·2·3등) 획득 횟수 기준</span></h2>

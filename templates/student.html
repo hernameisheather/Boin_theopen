@@ -63,17 +63,18 @@
   <table class="records vocab-tests">
     <thead>
       <tr>
-        <th style="width:80px">회차</th>
-        <th style="width:90px">범위</th>
+        <th style="width:70px">회차</th>
+        <th style="width:80px">범위</th>
         <th style="width:100px">상태</th>
-        <th style="width:90px">점수</th>
-        <th style="width:120px">최근 응시일</th>
+        <th style="width:70px">점수</th>
+        <th style="width:110px">재시험</th>
+        <th style="width:110px">최근 응시일</th>
         <th>피드백</th>
       </tr>
     </thead>
     <tbody>
       {% for t in word_tests %}
-      <tr class="vocab-row {% if t.completed %}vocab-done{% elif t.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
+      <tr class="vocab-row {% if t.completed and not t.needs_retake %}vocab-done{% elif t.has_record %}vocab-incomplete{% else %}vocab-pending{% endif %}">
         <td><b>{{ t.label }}</b></td>
         <td><code class="vocab-range">{{ t.range }}</code></td>
         <td>
@@ -87,6 +88,18 @@
         </td>
         <td class="score">
           {{ t.score if t.has_record else '—' }}
+        </td>
+        <td>
+          {% if t.needs_retake %}
+            {% if t.retake_taken %}
+            <span class="retake-taken">🔄 재시 완료 (O)</span>
+            {% else %}
+            <span class="retake-needed">⚠️ 재시 필요 (X)</span>
+            <br><small class="muted">{{ t.retake_reason }}</small>
+            {% endif %}
+          {% else %}
+            <span class="muted small">—</span>
+          {% endif %}
         </td>
         <td>{{ t.date or '—' }}</td>
         <td class="feedback">{{ t.feedback or '' }}</td>
@@ -122,15 +135,16 @@
     <thead>
       <tr>
         <th>시험명</th>
-        <th style="width:120px">상태</th>
-        <th style="width:90px">점수</th>
-        <th style="width:120px">응시일</th>
+        <th style="width:110px">상태</th>
+        <th style="width:70px">점수</th>
+        <th style="width:110px">재시험</th>
+        <th style="width:110px">응시일</th>
         <th>피드백</th>
       </tr>
     </thead>
     <tbody>
       {% for r in review_records %}
-      <tr class="vocab-row {% if r.completed %}vocab-done{% else %}vocab-incomplete{% endif %}">
+      <tr class="vocab-row {% if r.completed and not r.needs_retake %}vocab-done{% else %}vocab-incomplete{% endif %}">
         <td><b>{{ r.test_name }}</b></td>
         <td>
           {% if r.completed %}
@@ -140,6 +154,18 @@
           {% endif %}
         </td>
         <td class="score">{{ r.score or '—' }}</td>
+        <td>
+          {% if r.needs_retake %}
+            {% if r.retake_taken %}
+            <span class="retake-taken">🔄 재시 완료 (O)</span>
+            {% else %}
+            <span class="retake-needed">⚠️ 재시 필요 (X)</span>
+            <br><small class="muted">{{ r.retake_reason }}</small>
+            {% endif %}
+          {% else %}
+            <span class="muted small">—</span>
+          {% endif %}
+        </td>
         <td>{{ r.date or '—' }}</td>
         <td class="feedback">{{ r.feedback or '' }}</td>
       </tr>
