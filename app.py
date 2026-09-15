@@ -2601,6 +2601,92 @@ def run_test_config_bootstrap():
 run_test_config_bootstrap()
 
 
+# ─── 학생 전화번호 일괄 등록 (1회성) ─────────────────────
+_STUDENT_PHONES_BOOTSTRAP_MARKER = os.path.join(DATA_DIR, ".student_phones_v1.json")
+
+# 이름 → (학생 본인 전화번호, 학부모 전화번호)
+# 빈 문자열은 해당 번호 정보가 없음을 의미
+_STUDENT_PHONES_INITIAL = {
+    # 1차 목록 (학생 번호만)
+    "김도헌": ("010-6246-7636", ""),
+    "김민재": ("010-4134-8081", ""),
+    "김송민": ("010-6878-8619", ""),
+    "오승준": ("010-4909-6179", ""),
+    "오우진": ("010-8365-1735", ""),
+    "유한선": ("010-5109-0910", ""),
+    "이재현": ("010-9017-7405", ""),
+    "이호준": ("010-9333-1466", ""),
+    "장우영": ("010-5736-5805", ""),
+    "정주원": ("010-9400-5833", ""),
+    "조정우": ("010-6418-9351", ""),
+    "진유준": ("010-2141-2500", ""),
+    # 2차 목록 (학생+부모 번호)
+    "곽민기": ("010-2573-3310", "010-3340-3888"),
+    "곽서준": ("010-9911-0272", "010-4261-1997"),
+    "김이안": ("010-4616-2226", "010-4524-1675"),
+    "박도환": ("010-8635-5047", "010-8632-5047"),
+    "박시준": ("010-9244-3560", "010-4762-3560"),
+    "박인혁": ("010-7387-1429", "010-7388-1429"),
+    "성승훈": ("010-8613-9622", "010-9634-0555"),
+    "송석현": ("010-9866-0603", "010-9378-4868"),
+    "오준호": ("010-8849-5195", "010-2915-5195"),
+    "이동건": ("010-8871-6044", "010-8871-6700"),
+    "이성우": ("010-5346-3807", "010-6321-3807"),
+    "이율복": ("010-4232-9363", "010-9028-9363"),
+    "이정훈": ("010-7151-6491", "010-2995-6491"),
+    "정준혁": ("010-7211-7837", "010-9008-7837"),
+    "조부건": ("010-5948-0338", "010-8711-9768"),
+    "진태민": ("010-3713-3148", "010-9087-3148"),
+    "최홍":   ("010-2059-4159", "010-6302-4159"),
+    "하승민": ("010-2135-1291", "010-3205-1291"),
+    "최동준": ("010-8792-1327", "010-3774-8506"),
+}
+
+
+def run_student_phones_bootstrap():
+    import json
+    if os.path.exists(_STUDENT_PHONES_BOOTSTRAP_MARKER):
+        return
+    try:
+        data = load_data()
+        students = dict(data["students"])
+        updated = []
+        not_found = []
+        for name, (stu_phone, par_phone) in _STUDENT_PHONES_INITIAL.items():
+            matched_code = None
+            for code, s in students.items():
+                if s.get("name") == name:
+                    matched_code = code
+                    break
+            if not matched_code:
+                not_found.append(name)
+                continue
+            changed_fields = []
+            if stu_phone and not students[matched_code].get("phone"):
+                students[matched_code]["phone"] = stu_phone
+                changed_fields.append("student")
+            if par_phone and not students[matched_code].get("parent_phone"):
+                students[matched_code]["parent_phone"] = par_phone
+                changed_fields.append("parent")
+            if changed_fields:
+                updated.append({"name": name, "fields": changed_fields})
+        if updated:
+            save_data(students, data["records"])
+        os.makedirs(os.path.dirname(_STUDENT_PHONES_BOOTSTRAP_MARKER), exist_ok=True)
+        with open(_STUDENT_PHONES_BOOTSTRAP_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "updated": updated,
+                "not_found": not_found,
+            }, f, ensure_ascii=False, indent=2)
+        print(f"[INFO] Student phones bootstrap: updated={len(updated)}, not_found={not_found}")
+    except Exception as e:
+        print(f"[WARN] Student phones bootstrap failed: {e}")
+
+
+run_student_phones_bootstrap()
+
+
 # ─── 메인 ────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
