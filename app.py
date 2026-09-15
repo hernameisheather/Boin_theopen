@@ -375,12 +375,47 @@ _TERM_MIGRATION_MARKER = os.path.join(DATA_DIR, ".term_migration_v1.json")
 
 
 # ─── 단어 시험 회차 정의 ──────────────────────────────────
-WORD_TEST_ROUNDS = [
+# 보인고 스타일 단어 TEST — 모든 학생 페이지에 표시되는 메인 2회차
+BOINGO_WORD_ROUNDS = [
+    {"label": "Day 31-37", "range": "31-37", "questions": 40, "key": "day_31_37"},
+    {"label": "Day 38-45", "range": "38-45", "questions": 40, "key": "day_38_45"},
+]
+
+# 이전 개별 회차 — 이력이 있는 학생 페이지에만 개별 표시
+LEGACY_WORD_ROUNDS = [
     {"label": "1회차", "range": "31-34"},
     {"label": "2회차", "range": "35-38"},
     {"label": "3회차", "range": "39-42"},
     {"label": "4회차", "range": "43-45"},
 ]
+
+# 기존 코드 호환용 (retake 등 공통 로직 재사용)
+WORD_TEST_ROUNDS = BOINGO_WORD_ROUNDS
+
+
+# ─── 시험별 완료 요망 일자 관리 ────────────────────────
+TEST_DEADLINES_FILE = os.path.join(DATA_DIR, "test_deadlines.json")
+
+
+def load_test_deadlines():
+    """{'day_31_37': 'YYYY-MM-DD', ...} 반환. 파일 없으면 빈 dict."""
+    import json
+    if not os.path.exists(TEST_DEADLINES_FILE):
+        return {}
+    try:
+        with open(TEST_DEADLINES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {str(k): str(v) for k, v in data.items()}
+    except Exception as e:
+        print(f"[WARN] Load deadlines failed: {e}")
+        return {}
+
+
+def save_test_deadlines(deadlines):
+    import json
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(TEST_DEADLINES_FILE, "w", encoding="utf-8") as f:
+        json.dump(deadlines, f, ensure_ascii=False, indent=2)
 
 
 def _record_matches_round(record, range_str):
@@ -692,51 +727,68 @@ def grade_retake(answers):
     }
 
 
-def compute_word_test_status(student_records):
-    """특정 학생의 기록에서 단어시험 회차별 상태 계산.
-    같은 회차에 여러 기록이 있으면 가장 최근 날짜 기록을 사용.
-    상태 분류:
-      - completed: 기록 있음 + 점수가 '미완료' 등이 아닌 경우
-      - has_record: 기록이 존재 (점수 무관)
-    """
+def _build_word_test_row(round_info, student_records, deadlines=None):
+    """단일 회차의 상태 정보를 계산 (내부 헬퍼)."""
+    matching = [r for r in student_records
+                if _record_matches_round(r, round_info["range"])]
+    matching.sort(key=lambda r: r.get("date", ""), reverse=True)
+    latest = matching[0] if matching else None
+    score_text = latest.get("score", "") if latest else None
+    numeric_score = _parse_score(score_text) if score_text else None
+    has_record = latest is not None
+    completed = has_record and _is_word_test_completed(score_text)
+    # 재시험 필요 판단
+    needs_retake = False
+    retake_reason = ""
+    if not has_record:
+        needs_retake = True
+        retake_reason = "미응시"
+    elif not completed:
+        needs_retake = True
+        retake_reason = "미완료"
+    elif numeric_score is not None and numeric_score <= 80:
+        needs_retake = True
+        retake_reason = f"{int(numeric_score) if numeric_score == int(numeric_score) else numeric_score}점 (≤80)"
+    retake_taken = latest.get("resolved", False) if latest else False
+    deadline = ""
+    if deadlines and "key" in round_info:
+        deadline = deadlines.get(round_info["key"], "")
+    return {
+        "label": round_info["label"],
+        "range": round_info["range"],
+        "questions": round_info.get("questions"),
+        "deadline": deadline,
+        "has_record": has_record,
+        "completed": completed,
+        "score": score_text,
+        "numeric_score": numeric_score,
+        "date": latest.get("date") if latest else None,
+        "feedback": latest.get("feedback") if latest else None,
+        "attempts": len(matching),
+        "needs_retake": needs_retake,
+        "retake_reason": retake_reason,
+        "retake_taken": retake_taken,
+    }
+
+
+def compute_boingo_word_test_status(student_records, deadlines=None):
+    """보인고 스타일 단어 TEST (Day 31-37, Day 38-45) 상태 — 전체 학생 표시용."""
+    return [_build_word_test_row(r, student_records, deadlines) for r in BOINGO_WORD_ROUNDS]
+
+
+def compute_legacy_word_test_status(student_records):
+    """이전 개별 회차 (31-34, 35-38, 39-42, 43-45) 상태 — 기록 있는 경우만 반환."""
     result = []
-    for round_info in WORD_TEST_ROUNDS:
-        matching = [r for r in student_records
-                    if _record_matches_round(r, round_info["range"])]
-        matching.sort(key=lambda r: r.get("date", ""), reverse=True)
-        latest = matching[0] if matching else None
-        score_text = latest.get("score", "") if latest else None
-        numeric_score = _parse_score(score_text) if score_text else None
-        has_record = latest is not None
-        completed = has_record and _is_word_test_completed(score_text)
-        # 재시험 필요 판단: 미응시(기록 없음) or 미완료 or 80점 이하
-        needs_retake = False
-        retake_reason = ""
-        if not has_record:
-            needs_retake = True
-            retake_reason = "미응시"
-        elif not completed:
-            needs_retake = True
-            retake_reason = "미완료"
-        elif numeric_score is not None and numeric_score <= 80:
-            needs_retake = True
-            retake_reason = f"{int(numeric_score) if numeric_score == int(numeric_score) else numeric_score}점 (≤80)"
-        retake_taken = latest.get("resolved", False) if latest else False
-        result.append({
-            "label": round_info["label"],
-            "range": round_info["range"],
-            "has_record": has_record,
-            "completed": completed,
-            "score": score_text,
-            "numeric_score": numeric_score,
-            "date": latest.get("date") if latest else None,
-            "feedback": latest.get("feedback") if latest else None,
-            "attempts": len(matching),
-            "needs_retake": needs_retake,
-            "retake_reason": retake_reason,
-            "retake_taken": retake_taken,
-        })
+    for round_info in LEGACY_WORD_ROUNDS:
+        row = _build_word_test_row(round_info, student_records)
+        if row["has_record"]:
+            result.append(row)
     return result
+
+
+# 하위 호환 (retake page 등에서 사용)
+def compute_word_test_status(student_records):
+    return compute_boingo_word_test_status(student_records)
 
 
 # ─── 클리닉 자동 기록 (매주 화/목) ────────────────────────────
@@ -1105,9 +1157,16 @@ def my_page():
     my_flags.sort(key=lambda r: r["date"], reverse=True)
 
     # zone 계산 (모두 학기 필터된 items 기준)
-    word_tests = compute_word_test_status(items)
+    # 보인고 스타일 단어 TEST (Day 31-37, Day 38-45) — 전체 학생
+    deadlines = load_test_deadlines()
+    word_tests = compute_boingo_word_test_status(items, deadlines)
     word_tests_done = sum(1 for t in word_tests if t["completed"])
     word_tests_total = len(word_tests)
+
+    # 이전 개별 회차 — 기록 있는 학생만
+    legacy_word_tests = compute_legacy_word_test_status(items)
+    legacy_word_done = sum(1 for t in legacy_word_tests if t["completed"])
+    legacy_word_total = len(legacy_word_tests)
 
     review_records = compute_review_test_records(items)
     review_done = sum(1 for r in review_records if r["completed"])
@@ -1129,6 +1188,9 @@ def my_page():
         word_tests=word_tests,
         word_tests_done=word_tests_done,
         word_tests_total=word_tests_total,
+        legacy_word_tests=legacy_word_tests,
+        legacy_word_done=legacy_word_done,
+        legacy_word_total=legacy_word_total,
         review_records=review_records,
         review_done=review_done,
         review_total=review_total,
@@ -1368,6 +1430,28 @@ def admin():
 def admin_logout():
     session.pop("is_admin", None)
     return redirect(url_for("admin_login"))
+
+
+# ─── 라우트: 관리자 — 단어 TEST 완료 요망 일자 관리 ──────
+@app.route("/admin/deadlines", methods=["GET", "POST"])
+@admin_required
+def admin_deadlines():
+    if request.method == "POST":
+        deadlines = {}
+        for round_info in BOINGO_WORD_ROUNDS:
+            key = round_info["key"]
+            value = request.form.get(f"deadline_{key}", "").strip()
+            deadlines[key] = value
+        save_test_deadlines(deadlines)
+        flash("완료 요망 일자가 저장되었습니다.", "success")
+        return redirect(url_for("admin_deadlines"))
+
+    deadlines = load_test_deadlines()
+    return render_template(
+        "admin_deadlines.html",
+        rounds=BOINGO_WORD_ROUNDS,
+        deadlines=deadlines,
+    )
 
 
 # ─── 라우트: 관리자 — 기록 관리 ──────────────────────────────

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}완료 요망 일자 관리{% endblock %}
+{% block content %}
+{% include "_admin_nav.html" %}
+
+<header class="page-header">
+  <div>
+    <h1>📅 단어 TEST 완료 요망 일자</h1>
+    <p class="muted small">각 회차별 학생 완료 요망 일자를 설정하세요. 학부모 페이지에 표시됩니다.</p>
+  </div>
+</header>
+
+<section class="card">
+  <form method="post" class="form">
+    <table class="records">
+      <thead>
+        <tr>
+          <th style="width:160px">회차</th>
+          <th style="width:100px">문제 수</th>
+          <th style="width:120px">범위</th>
+          <th>완료 요망 일자</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rounds %}
+        <tr>
+          <td><b>{{ r.label }}</b></td>
+          <td>{{ r.questions }}문제</td>
+          <td><code>{{ r.range }}</code></td>
+          <td>
+            <input type="date" name="deadline_{{ r.key }}"
+                   value="{{ deadlines.get(r.key, '') }}"
+                   style="padding:8px 12px; border:1px solid #e5e7eb; border-radius:6px;">
+            {% if deadlines.get(r.key) %}
+            <button type="submit" formaction="{{ url_for('admin_deadlines') }}?clear={{ r.key }}"
+                    class="btn-mini" style="margin-left:8px;">지우기</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="form-actions" style="margin-top:16px;">
+      <button type="submit" class="btn-primary">💾 저장</button>
+    </div>
+  </form>
+</section>
+
+<section class="card info">
+  <h2>📌 안내</h2>
+  <ul>
+    <li>완료 요망 일자를 설정하면 학부모 페이지 <b>📖 보인고 스타일 단어 TEST</b> 표에 파란 뱃지로 표시됩니다.</li>
+    <li>빈 값으로 두면 해당 회차는 일자 표시 없이 <b>—</b>로 나옵니다.</li>
+    <li>날짜는 <b>YYYY-MM-DD</b> 형식 (달력 클릭으로 선택).</li>
+  </ul>
+</section>
+{% endblock %}

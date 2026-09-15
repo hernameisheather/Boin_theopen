@@ -831,6 +831,21 @@ pre {
   font-weight: 700;
   border: 1px solid #6ee7b7;
 }
+.deadline-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid #93c5fd;
+}
+.legacy-word-card {
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  border: 1px solid #d1d5db;
+}
+.legacy-word-card h2 { color: #4b5563; }
 
 .vocab-status-pending {
   display: inline-block;
