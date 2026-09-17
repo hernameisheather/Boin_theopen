@@ -465,6 +465,41 @@ RETAKE_ZONE_META = [
     {"key": "legacy_word", "label": "이전 개별 단어 TEST (이력)", "max_score": 100},
 ]
 
+TEST_MAX_SCORES_FILE = os.path.join(DATA_DIR, "test_max_scores.json")
+
+DEFAULT_MAX_SCORES = {m["key"]: m["max_score"] for m in RETAKE_ZONE_META}
+
+
+def load_max_scores():
+    import json
+    if not os.path.exists(TEST_MAX_SCORES_FILE):
+        return dict(DEFAULT_MAX_SCORES)
+    try:
+        with open(TEST_MAX_SCORES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        result = dict(DEFAULT_MAX_SCORES)
+        for k, v in data.items():
+            try:
+                result[str(k)] = float(v)
+            except (ValueError, TypeError):
+                pass
+        return result
+    except Exception:
+        return dict(DEFAULT_MAX_SCORES)
+
+
+def save_max_scores(scores):
+    import json
+    os.makedirs(DATA_DIR, exist_ok=True)
+    clean = {}
+    for k, v in scores.items():
+        try:
+            clean[str(k)] = float(v)
+        except (ValueError, TypeError):
+            pass
+    with open(TEST_MAX_SCORES_FILE, "w", encoding="utf-8") as f:
+        json.dump(clean, f, ensure_ascii=False, indent=2)
+
 
 def load_retake_thresholds():
     """{zone_key: threshold_number}"""
@@ -1652,17 +1687,26 @@ def admin_deadlines():
     if request.method == "POST":
         action = request.form.get("action", "deadlines")
         if action == "thresholds":
-            # 재시험 기준 저장
+            # 재시험 기준 + 만점 저장
             new_thresholds = {}
+            new_max_scores = {}
             for meta in RETAKE_ZONE_META:
-                val = request.form.get(f"threshold_{meta['key']}", "").strip()
-                if val:
+                key = meta["key"]
+                thr_val = request.form.get(f"threshold_{key}", "").strip()
+                if thr_val:
                     try:
-                        new_thresholds[meta["key"]] = float(val)
+                        new_thresholds[key] = float(thr_val)
+                    except ValueError:
+                        pass
+                max_val = request.form.get(f"maxscore_{key}", "").strip()
+                if max_val:
+                    try:
+                        new_max_scores[key] = float(max_val)
                     except ValueError:
                         pass
             save_retake_thresholds(new_thresholds)
-            flash("재시험 기준이 저장되었습니다.", "success")
+            save_max_scores(new_max_scores)
+            flash("재시험 기준·만점이 저장되었습니다.", "success")
         else:
             # 완료 요망 일자 + 시행일 저장
             config = {}
@@ -1681,12 +1725,14 @@ def admin_deadlines():
 
     config = load_test_deadlines()
     thresholds = load_retake_thresholds()
+    max_scores = load_max_scores()
     return render_template(
         "admin_deadlines.html",
         rounds=BOINGO_WORD_ROUNDS,
         config=config,
         schools=SCHOOLS,
         thresholds=thresholds,
+        max_scores=max_scores,
         zone_meta=RETAKE_ZONE_META,
     )
 
@@ -2164,19 +2210,17 @@ def admin_retakes():
             sms_body_parent = ""
             sms_body_student_encoded = ""
             sms_body_parent_encoded = ""
+            name_disp = student.get('name', '?')
             if pending > 0:
                 pending_lines = [
                     f"· {it['type']} {it['label']}"
                     for it in retake_items if not it["retake_taken"]
                 ]
-                name_disp = student.get('name', '?')
-                # 학생 본인용
                 sms_body_student = (
                     f"[신쌤] {name_disp}, 재시험 안내:\n"
                     + "\n".join(pending_lines)
                     + "\n\n재시험 일정 확인 후 응시 부탁드립니다."
                 )
-                # 어머님용
                 sms_body_parent = (
                     f"[신쌤] {name_disp} 학생 어머님, 재시험 안내드립니다:\n"
                     + "\n".join(pending_lines)
@@ -2184,6 +2228,59 @@ def admin_retakes():
                 )
                 sms_body_student_encoded = url_quote(sms_body_student, safe="")
                 sms_body_parent_encoded = url_quote(sms_body_parent, safe="")
+
+            # 이 학생의 전체 시험 데이터 수집 (SMS 옵션 "전체" / "선택"용)
+            all_tests_for_sms = []
+            # 1) 보인고 단어 TEST (2회차)
+            for br in BOINGO_WORD_ROUNDS:
+                b_matching = sorted(
+                    [r for r in student_records if _record_matches_round(r, br["range"])],
+                    key=lambda r: r.get("date", ""), reverse=True,
+                )
+                b_latest = b_matching[0] if b_matching else None
+                b_score = (b_latest.get("score") if b_latest else "").strip() if b_latest else ""
+                if not b_score and not b_latest:
+                    b_score = "미응시"
+                all_tests_for_sms.append({
+                    "key": f"boingo_{br['key']}",
+                    "label": f"{br['label']} ({br['questions']}문제)",
+                    "score": b_score or "-",
+                    "date": (b_latest.get("date") or "") if b_latest else "",
+                })
+            # 2) Review test (기록별)
+            review_items_all = compute_review_test_records(student_records)
+            for r in review_items_all:
+                all_tests_for_sms.append({
+                    "key": f"review_{r['test_name']}",
+                    "label": r["test_name"],
+                    "score": r["score"] or "-",
+                    "date": r["date"] or "",
+                })
+            # 3) 기타 카테고리 (최근 1건, 위에서 이미 잡힌 것 제외)
+            covered_categories = set()
+            for br in BOINGO_WORD_ROUNDS:
+                covered_categories.add(br["range"])
+            other_cats = {}
+            for r in student_records:
+                cat = (r.get("category") or "").strip()
+                if not cat:
+                    continue
+                # 이미 review/boingo로 잡힌 것 제외
+                cat_lower = cat.lower()
+                if "review" in cat_lower or "리뷰" in cat_lower:
+                    continue
+                if any(_record_matches_round(r, br["range"]) for br in BOINGO_WORD_ROUNDS):
+                    continue
+                # 각 카테고리별 최근 기록만
+                if cat not in other_cats or r.get("date", "") > other_cats[cat].get("date", ""):
+                    other_cats[cat] = r
+            for cat, r in sorted(other_cats.items()):
+                all_tests_for_sms.append({
+                    "key": f"cat_{cat}",
+                    "label": cat,
+                    "score": r.get("score") or "-",
+                    "date": r.get("date") or "",
+                })
             students_data.append({
                 "code": code,
                 "name": student.get("name", "?"),
@@ -2197,6 +2294,7 @@ def admin_retakes():
                 "sms_body_parent": sms_body_parent,
                 "sms_body_student_encoded": sms_body_student_encoded,
                 "sms_body_parent_encoded": sms_body_parent_encoded,
+                "all_tests": all_tests_for_sms,
                 "retake_items": retake_items,
                 "pending_count": pending,
                 "total_count": len(retake_items),
@@ -2229,6 +2327,18 @@ def admin_retakes():
             copy_all_lines.append("")
     copy_all_lines.append("재시험 진행 후 응시 완료 처리는 관리자 페이지에서 O/X 토글로 변경됩니다.")
 
+    # 학생별 SMS 데이터 (JS 사용)
+    students_sms_data = {}
+    for s in students_data:
+        students_sms_data[s["code"]] = {
+            "name": s["name"],
+            "student_phone_raw": s["student_phone_raw"],
+            "parent_phone_raw": s["parent_phone_raw"],
+            "sms_body_student": s["sms_body_student"],
+            "sms_body_parent": s["sms_body_parent"],
+            "all_tests": s["all_tests"],
+        }
+
     return render_template(
         "admin_retakes.html",
         students_data=students_data,
@@ -2236,6 +2346,7 @@ def admin_retakes():
         total_items=total_items,
         errors=errors,
         copy_all_lines=copy_all_lines,
+        students_sms_data=students_sms_data,
     )
 
 

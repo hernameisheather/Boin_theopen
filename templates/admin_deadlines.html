@@ -48,7 +48,7 @@
       <thead>
         <tr>
           <th style="width:250px">시험 종류</th>
-          <th style="width:120px">만점 (기준)</th>
+          <th style="width:180px">만점 (편집 가능)</th>
           <th>재시험 기준 (이 점수 이하)</th>
         </tr>
       </thead>
@@ -56,11 +56,16 @@
         {% for meta in zone_meta %}
         <tr>
           <td><b>{{ meta.label }}</b></td>
-          <td class="muted">{{ meta.max_score }}점</td>
+          <td>
+            <input type="number" step="any" min="0" name="maxscore_{{ meta.key }}"
+                   value="{{ max_scores.get(meta.key, meta.max_score) }}"
+                   style="padding:8px 12px; border:1px solid #e5e7eb; border-radius:6px; width:100px;">
+            <span class="muted">점 만점</span>
+          </td>
           <td>
             <input type="number" step="any" min="0" name="threshold_{{ meta.key }}"
                    value="{{ thresholds.get(meta.key, '') }}"
-                   style="padding:8px 12px; border:1px solid #e5e7eb; border-radius:6px; width:120px;">
+                   style="padding:8px 12px; border:1px solid #e5e7eb; border-radius:6px; width:100px;">
             <span class="muted">점 이하 → 재시</span>
           </td>
         </tr>

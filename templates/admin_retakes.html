@@ -74,26 +74,31 @@
     <span class="retake-summary-tag">
       미완료 <b>{{ s.pending_count }}</b> / 전체 {{ s.total_count }}건
     </span>
-    {% if s.pending_count > 0 %}
-      {% if s.student_phone_raw %}
-      <a href="sms:{{ s.student_phone_raw }}?body={{ s.sms_body_student_encoded }}"
-         class="sms-btn sms-btn-student" title="학생 본인에게 문자 전송">
-        📱 학생에게
-      </a>
-      {% endif %}
-      {% if s.parent_phone_raw %}
-      <a href="sms:{{ s.parent_phone_raw }}?body={{ s.sms_body_parent_encoded }}"
-         class="sms-btn sms-btn-parent" title="어머님(학부모)에게 문자 전송">
-        📱 어머님에게
-      </a>
-      {% endif %}
-    {% endif %}
   </h2>
   <p class="muted small">
     {% if s.parent %}학부모: {{ s.parent }}{% endif %}
     · 📱 학생 {% if s.phone %}<code>{{ s.phone }}</code>{% else %}<span class="phone-missing">미등록</span>{% endif %}
     · 📱 어머님 {% if s.parent_phone %}<code>{{ s.parent_phone }}</code>{% else %}<span class="phone-missing">미등록</span>{% endif %}
   </p>
+  {% if s.student_phone_raw or s.parent_phone_raw %}
+  <div class="sms-options-box" data-code="{{ s.code }}">
+    <div class="sms-row">
+      <span class="sms-label">📢 내용 선택:</span>
+      <label><input type="radio" name="content_{{ s.code }}" value="retake" {% if s.pending_count > 0 %}checked{% endif %} onchange="toggleTestList('{{ s.code }}')"> 재시험만</label>
+      <label><input type="radio" name="content_{{ s.code }}" value="all" {% if s.pending_count == 0 %}checked{% endif %} onchange="toggleTestList('{{ s.code }}')"> 전체 시험 점수</label>
+      <label><input type="radio" name="content_{{ s.code }}" value="select" onchange="toggleTestList('{{ s.code }}')"> 원하는 점수 선택</label>
+    </div>
+    <div class="test-selector" id="testsel_{{ s.code }}" style="display:none;"></div>
+    <div class="sms-row">
+      {% if s.student_phone_raw %}
+      <button type="button" class="sms-btn sms-btn-student" onclick="openSMS('{{ s.code }}', 'student')">📱 학생에게 보내기</button>
+      {% endif %}
+      {% if s.parent_phone_raw %}
+      <button type="button" class="sms-btn sms-btn-parent" onclick="openSMS('{{ s.code }}', 'parent')">📱 어머님에게 보내기</button>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
   <table class="records">
     <thead>
       <tr>
@@ -145,6 +150,8 @@
 
 <script>
 const RETAKE_TEXT_LINES = {{ copy_all_lines | tojson }};
+const STUDENT_SMS_DATA = {{ students_sms_data | tojson }};
+
 function copyAllRetakeMessage() {
   const text = RETAKE_TEXT_LINES.join("\n");
   navigator.clipboard.writeText(text).then(function() {
@@ -160,6 +167,70 @@ function copyAllRetakeMessage() {
     document.getElementById('copy-status').textContent = "✅ 복사되었습니다! 카톡에 붙여넣기 하세요.";
     document.getElementById('copy-status').style.color = "#059669";
   });
+}
+
+function toggleTestList(code) {
+  const box = document.getElementById('testsel_' + code);
+  const option = document.querySelector(`input[name="content_${code}"]:checked`).value;
+  if (option === "select") {
+    const s = STUDENT_SMS_DATA[code];
+    if (!s) { box.style.display = "none"; return; }
+    let html = '<div style="margin-top:8px; padding:10px; background:#f9fafb; border-radius:6px;"><b style="display:block; margin-bottom:6px;">📋 포함할 시험 선택:</b>';
+    s.all_tests.forEach(function(t) {
+      html += `<label style="display:block; padding:3px 0;"><input type="checkbox" name="test_${code}" value="${t.key}" checked> <b>${t.label}</b>: ${t.score}${t.date ? ' <span style="color:#6b7280;">('+t.date+')</span>' : ''}</label>`;
+    });
+    html += '</div>';
+    box.innerHTML = html;
+    box.style.display = "block";
+  } else {
+    box.style.display = "none";
+  }
+}
+
+function buildScoreSMS(s, recipient, testsList) {
+  let body = "[신쌤] " + s.name;
+  if (recipient === "parent") body += " 학생 어머님, 시험 성적 안내드립니다:";
+  else body += ", 시험 성적 안내:";
+  body += "\n";
+  testsList.forEach(function(t) {
+    let line = "· " + t.label + ": " + t.score;
+    if (t.date) line += " (" + t.date + ")";
+    body += "\n" + line;
+  });
+  if (recipient === "parent") body += "\n\n확인 부탁드립니다. 감사합니다.";
+  else body += "\n\n확인해주세요.";
+  return body;
+}
+
+function openSMS(code, recipient) {
+  const s = STUDENT_SMS_DATA[code];
+  if (!s) { alert("학생 데이터 오류"); return; }
+  const phone = recipient === "student" ? s.student_phone_raw : s.parent_phone_raw;
+  if (!phone) {
+    alert(recipient === "student" ? "학생 전화번호가 등록되어 있지 않습니다." : "어머님 전화번호가 등록되어 있지 않습니다.");
+    return;
+  }
+  const option = document.querySelector(`input[name="content_${code}"]:checked`).value;
+  let body = "";
+  if (option === "retake") {
+    body = recipient === "student" ? s.sms_body_student : s.sms_body_parent;
+    if (!body) {
+      alert("현재 미완료 재시험이 없습니다. '전체 시험 점수' 또는 '원하는 점수 선택'을 이용하세요.");
+      return;
+    }
+  } else if (option === "all") {
+    body = buildScoreSMS(s, recipient, s.all_tests);
+  } else {
+    const checked = document.querySelectorAll(`input[name="test_${code}"]:checked`);
+    if (checked.length === 0) {
+      alert("최소 1개 이상의 시험을 선택해주세요.");
+      return;
+    }
+    const keys = Array.from(checked).map(function(cb) { return cb.value; });
+    const selected = s.all_tests.filter(function(t) { return keys.indexOf(t.key) >= 0; });
+    body = buildScoreSMS(s, recipient, selected);
+  }
+  window.location.href = "sms:" + phone + "?body=" + encodeURIComponent(body);
 }
 </script>
 {% endblock %}
