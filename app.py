@@ -449,6 +449,57 @@ def save_test_deadlines(config):
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 
+# ─── 시험별 재시험 기준 (점수 이하일 때 재시 필요) ─────────
+RETAKE_THRESHOLDS_FILE = os.path.join(DATA_DIR, "retake_thresholds.json")
+
+# 기본값: 단어시험 40점 만점이라 30점 이하 재시, 그 외는 80점 이하 재시
+DEFAULT_RETAKE_THRESHOLDS = {
+    "boingo_word": 30,   # 보인고 스타일 단어 TEST (40점 만점 기준)
+    "review": 80,        # Review Test (100점 만점 기준)
+    "legacy_word": 80,   # 이전 개별 회차 (100점 만점 기준)
+}
+
+RETAKE_ZONE_META = [
+    {"key": "boingo_word", "label": "보인고 스타일 단어 TEST", "max_score": 40},
+    {"key": "review", "label": "Review Test", "max_score": 100},
+    {"key": "legacy_word", "label": "이전 개별 단어 TEST (이력)", "max_score": 100},
+]
+
+
+def load_retake_thresholds():
+    """{zone_key: threshold_number}"""
+    import json
+    if not os.path.exists(RETAKE_THRESHOLDS_FILE):
+        return dict(DEFAULT_RETAKE_THRESHOLDS)
+    try:
+        with open(RETAKE_THRESHOLDS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        result = dict(DEFAULT_RETAKE_THRESHOLDS)
+        for k, v in data.items():
+            try:
+                result[str(k)] = float(v)
+            except (ValueError, TypeError):
+                pass
+        return result
+    except Exception as e:
+        print(f"[WARN] Load retake thresholds failed: {e}")
+        return dict(DEFAULT_RETAKE_THRESHOLDS)
+
+
+def save_retake_thresholds(thresholds):
+    import json
+    os.makedirs(DATA_DIR, exist_ok=True)
+    # 숫자로 정규화
+    clean = {}
+    for k, v in thresholds.items():
+        try:
+            clean[str(k)] = float(v)
+        except (ValueError, TypeError):
+            pass
+    with open(RETAKE_THRESHOLDS_FILE, "w", encoding="utf-8") as f:
+        json.dump(clean, f, ensure_ascii=False, indent=2)
+
+
 def _record_matches_round(record, range_str):
     """기록이 특정 단어시험 회차에 해당하는지 판단.
     매칭 기준: 항목 또는 피드백에 range 문자열이 들어있고, 단어/어휘 키워드도 함께 있을 때.
@@ -507,20 +558,23 @@ def compute_review_test_records(student_records):
         if cat not in by_cat or date > (by_cat[cat].get("date") or ""):
             by_cat[cat] = r
 
+    threshold = load_retake_thresholds().get("review", 80)
     result = []
     for cat, r in by_cat.items():
         score_text = r.get("score", "")
         numeric_score = _parse_score(score_text)
         completed = _is_word_test_completed(score_text)
-        # 재시험 필요 판단: 미완료 or 80점 이하
+        # 재시험 필요 판단: 미완료 or 임계값 이하
         needs_retake = False
         retake_reason = ""
         if not completed:
             needs_retake = True
             retake_reason = "미완료"
-        elif numeric_score is not None and numeric_score <= 80:
+        elif numeric_score is not None and numeric_score <= threshold:
             needs_retake = True
-            retake_reason = f"{int(numeric_score) if numeric_score == int(numeric_score) else numeric_score}점 (≤80)"
+            val = int(numeric_score) if numeric_score == int(numeric_score) else numeric_score
+            thr = int(threshold) if threshold == int(threshold) else threshold
+            retake_reason = f"{val}점 (≤{thr})"
         retake_taken = r.get("resolved", False)
         result.append({
             "test_name": cat,
@@ -758,8 +812,10 @@ def grade_retake(answers):
     }
 
 
-def _build_word_test_row(round_info, student_records, deadlines=None):
+def _build_word_test_row(round_info, student_records, deadlines=None, threshold=None):
     """단일 회차의 상태 정보를 계산 (내부 헬퍼, legacy용)."""
+    if threshold is None:
+        threshold = load_retake_thresholds().get("legacy_word", 80)
     matching = [r for r in student_records
                 if _record_matches_round(r, round_info["range"])]
     matching.sort(key=lambda r: r.get("date", ""), reverse=True)
@@ -776,9 +832,11 @@ def _build_word_test_row(round_info, student_records, deadlines=None):
     elif not completed:
         needs_retake = True
         retake_reason = "미완료"
-    elif numeric_score is not None and numeric_score <= 80:
+    elif numeric_score is not None and numeric_score <= threshold:
         needs_retake = True
-        retake_reason = f"{int(numeric_score) if numeric_score == int(numeric_score) else numeric_score}점 (≤80)"
+        val = int(numeric_score) if numeric_score == int(numeric_score) else numeric_score
+        thr = int(threshold) if threshold == int(threshold) else threshold
+        retake_reason = f"{val}점 (≤{thr})"
     retake_taken = latest.get("resolved", False) if latest else False
     deadline = ""
     if deadlines and "key" in round_info:
@@ -881,16 +939,18 @@ def _build_boingo_word_test_row(round_info, student_code, student_records, all_r
             parts.append(f"{sc} {_format_mmdd(d)}")
     test_date_display = " · ".join(parts) if parts else ""
 
-    # 재시험
+    # 재시험 (설정된 threshold 사용)
+    threshold = load_retake_thresholds().get("boingo_word", 30)
     needs_retake = False
     retake_reason = ""
     if status == "미응시":
         needs_retake = True
         retake_reason = "미응시"
-    elif has_score and numeric_score <= 80:
+    elif has_score and numeric_score <= threshold:
         needs_retake = True
         val = int(numeric_score) if numeric_score == int(numeric_score) else numeric_score
-        retake_reason = f"{val}점 (≤80)"
+        thr = int(threshold) if threshold == int(threshold) else threshold
+        retake_reason = f"{val}점 (≤{thr})"
     retake_taken = latest.get("resolved", False) if latest else False
 
     return {
@@ -1590,26 +1650,44 @@ def admin_logout():
 @admin_required
 def admin_deadlines():
     if request.method == "POST":
-        config = {}
-        for round_info in BOINGO_WORD_ROUNDS:
-            key = round_info["key"]
-            entry = {
-                "deadline": request.form.get(f"deadline_{key}", "").strip(),
-                "test_dates": {},
-            }
-            for sc in SCHOOLS:
-                entry["test_dates"][sc] = request.form.get(f"testdate_{key}_{sc}", "").strip()
-            config[key] = entry
-        save_test_deadlines(config)
-        flash("완료 요망 일자·시행일이 저장되었습니다.", "success")
+        action = request.form.get("action", "deadlines")
+        if action == "thresholds":
+            # 재시험 기준 저장
+            new_thresholds = {}
+            for meta in RETAKE_ZONE_META:
+                val = request.form.get(f"threshold_{meta['key']}", "").strip()
+                if val:
+                    try:
+                        new_thresholds[meta["key"]] = float(val)
+                    except ValueError:
+                        pass
+            save_retake_thresholds(new_thresholds)
+            flash("재시험 기준이 저장되었습니다.", "success")
+        else:
+            # 완료 요망 일자 + 시행일 저장
+            config = {}
+            for round_info in BOINGO_WORD_ROUNDS:
+                key = round_info["key"]
+                entry = {
+                    "deadline": request.form.get(f"deadline_{key}", "").strip(),
+                    "test_dates": {},
+                }
+                for sc in SCHOOLS:
+                    entry["test_dates"][sc] = request.form.get(f"testdate_{key}_{sc}", "").strip()
+                config[key] = entry
+            save_test_deadlines(config)
+            flash("완료 요망 일자·시행일이 저장되었습니다.", "success")
         return redirect(url_for("admin_deadlines"))
 
     config = load_test_deadlines()
+    thresholds = load_retake_thresholds()
     return render_template(
         "admin_deadlines.html",
         rounds=BOINGO_WORD_ROUNDS,
         config=config,
         schools=SCHOOLS,
+        thresholds=thresholds,
+        zone_meta=RETAKE_ZONE_META,
     )
 
 
@@ -1996,6 +2074,10 @@ def admin_retakes():
     def _term_of(r):
         return r.get("term") or DEFAULT_TERM
 
+    # 재시험 기준 로드
+    thresholds = load_retake_thresholds()
+    word_threshold = thresholds.get("boingo_word", 30)
+
     # 학생별 재시험 대상 수집
     students_data = []
     errors = []  # 에러 학생 로깅용
@@ -2035,10 +2117,11 @@ def admin_retakes():
                     reason = "미완료"
                 else:
                     numeric = _parse_score(score_text)
-                    if numeric is not None and numeric <= 80:
+                    if numeric is not None and numeric <= word_threshold:
                         needs = True
                         val = int(numeric) if numeric == int(numeric) else numeric
-                        reason = f"{val}점 (≤80)"
+                        thr = int(word_threshold) if word_threshold == int(word_threshold) else word_threshold
+                        reason = f"{val}점 (≤{thr})"
 
             if needs:
                 retake_items.append({
