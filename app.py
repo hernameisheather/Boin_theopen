@@ -449,6 +449,36 @@ def save_test_deadlines(config):
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 
+# ─── SMS Pep Talk 문구 풀 (매 발송마다 랜덤 선택) ──────
+PEP_TALKS = [
+    "오늘도 파이팅! 한 걸음씩 나아가면 됩니다.",
+    "노력은 배신하지 않아요. 오늘의 한 문제가 미래를 만들어요.",
+    "꾸준함이 실력을 만듭니다. 조금씩 나아가고 있어요.",
+    "매일이 성장의 기회입니다. 오늘도 조금만 더!",
+    "실수도 배움의 일부. 도전 자체가 이미 성공이에요.",
+    "포기하지 않는 사람에게 결국 기회가 옵니다.",
+    "지금의 노력이 미래의 나를 만들어요.",
+    "천천히 가도 괜찮아요. 방향만 맞으면 됩니다.",
+    "한 걸음씩 꾸준히. 그게 최고의 방법이에요.",
+    "당장의 결과보다 지금의 태도가 더 중요합니다.",
+    "어제보다 나은 오늘을 만들어봐요.",
+    "잘하고 있어요. 계속 해봅시다!",
+    "성실함은 결국 이깁니다.",
+    "매일 조금씩. 그게 진짜 실력이에요.",
+    "지금 이 순간의 집중이 큰 차이를 만듭니다.",
+    "쉬어가도 괜찮아요. 다시 시작하는 용기가 대단해요.",
+    "네가 여기까지 온 것 자체가 이미 대단해요.",
+    "완벽하지 않아도 괜찮아. 계속 하는 것이 중요해요.",
+    "너의 페이스대로 가면 돼요. 조급해 하지 말아요.",
+    "지금의 작은 노력이 큰 결과로 돌아옵니다.",
+    "포기하지 않고 하루하루 채워가는 네가 자랑스러워요.",
+    "실패는 성공의 어머니. 다시 도전하는 게 진짜 용기예요.",
+    "너의 노력을 응원합니다. 오늘도 힘내요!",
+    "매일 이 자리에 나와 앉는 네가 이미 반은 성공이야.",
+    "우리 함께 나아가요. 신쌤이 응원할게요.",
+]
+
+
 # ─── 시험별 재시험 기준 (점수 이하일 때 재시 필요) ─────────
 RETAKE_THRESHOLDS_FILE = os.path.join(DATA_DIR, "retake_thresholds.json")
 
@@ -2120,9 +2150,62 @@ def admin_retakes():
     def _term_of(r):
         return r.get("term") or DEFAULT_TERM
 
-    # 재시험 기준 로드
+    # 재시험 기준 + 시험 설정 로드
     thresholds = load_retake_thresholds()
     word_threshold = thresholds.get("boingo_word", 30)
+    review_threshold = thresholds.get("review", 80)
+    test_config = load_test_deadlines()
+
+    # 2학기 정규반 전체 기록 (등수 계산용)
+    all_term_records_ret = [r for r in data["records"]
+                            if _term_of(r) == DEFAULT_TERM]
+
+    def _rank_for(matcher_fn, target_code):
+        """test 매칭 함수 기반으로 target_code의 등수 반환 (1~N) 또는 None"""
+        bests = {}
+        for r in all_term_records_ret:
+            if not matcher_fn(r):
+                continue
+            s = _parse_score(r.get("score", ""))
+            if s is None:
+                continue
+            c = r.get("student_code", "")
+            if c not in bests or s > bests[c]:
+                bests[c] = s
+        if target_code not in bests or len(bests) < 2:
+            return None
+        sorted_e = sorted(bests.items(), key=lambda x: -x[1])
+        prev = None
+        cur_rank = 0
+        for i, (c, s) in enumerate(sorted_e):
+            if s != prev:
+                cur_rank = i + 1
+                prev = s
+            if c == target_code:
+                return cur_rank
+        return None
+
+    def _format_test_display(latest, score_num, threshold, deadline, rank):
+        """새 SMS 형식으로 display + 재시/미응시 여부 반환.
+        반환: (display_text, is_retake_or_missing)
+        """
+        if latest is None:
+            return "미응시", True
+        raw = str(latest.get("score", "") or "").strip()
+        if not raw:
+            return "미응시", True
+        if score_num is None:
+            if "미완료" in raw or "미응시" in raw or "결석" in raw:
+                return "미응시", True
+            return raw, False
+        val = int(score_num) if score_num == int(score_num) else score_num
+        if score_num <= threshold:
+            if deadline:
+                return f"{val}점 (재시 완료 기한: {deadline})", True
+            return f"{val}점 (재시 필요)", True
+        if rank and rank <= 3:
+            return f"PASS({rank}등♡)", False
+        return "PASS", False
 
     # 학생별 재시험 대상 수집
     students_data = []
@@ -2211,25 +2294,9 @@ def admin_retakes():
             sms_body_student_encoded = ""
             sms_body_parent_encoded = ""
             name_disp = student.get('name', '?')
-            if pending > 0:
-                pending_lines = [
-                    f"· {it['type']} {it['label']}"
-                    for it in retake_items if not it["retake_taken"]
-                ]
-                sms_body_student = (
-                    f"[신쌤] {name_disp}, 재시험 안내:\n"
-                    + "\n".join(pending_lines)
-                    + "\n\n재시험 일정 확인 후 응시 부탁드립니다."
-                )
-                sms_body_parent = (
-                    f"[신쌤] {name_disp} 학생 어머님, 재시험 안내드립니다:\n"
-                    + "\n".join(pending_lines)
-                    + "\n\n재시험 일정 확인 부탁드립니다. 감사합니다."
-                )
-                sms_body_student_encoded = url_quote(sms_body_student, safe="")
-                sms_body_parent_encoded = url_quote(sms_body_parent, safe="")
 
             # 이 학생의 전체 시험 데이터 수집 (SMS 옵션 "전체" / "선택"용)
+            # 새 포맷: 미응시/PASS/PASS(N등♡)/{점수}점 (재시 완료 기한: YYYY-MM-DD)
             all_tests_for_sms = []
             # 1) 보인고 단어 TEST (2회차)
             for br in BOINGO_WORD_ROUNDS:
@@ -2238,47 +2305,65 @@ def admin_retakes():
                     key=lambda r: r.get("date", ""), reverse=True,
                 )
                 b_latest = b_matching[0] if b_matching else None
-                b_score = (b_latest.get("score") if b_latest else "").strip() if b_latest else ""
-                if not b_score and not b_latest:
-                    b_score = "미응시"
+                b_score_num = _parse_score(b_latest.get("score", "")) if b_latest else None
+                b_cfg = test_config.get(br["key"], {}) if isinstance(test_config.get(br["key"]), dict) else {}
+                b_deadline = b_cfg.get("deadline", "")
+                b_rank = _rank_for(
+                    (lambda rng=br["range"]: (lambda r: _record_matches_round(r, rng)))(),
+                    code,
+                )
+                display, is_ret = _format_test_display(b_latest, b_score_num, word_threshold, b_deadline, b_rank)
                 all_tests_for_sms.append({
                     "key": f"boingo_{br['key']}",
-                    "label": f"{br['label']} ({br['questions']}문제)",
-                    "score": b_score or "-",
+                    "label": br["label"],
+                    "display_text": display,
+                    "is_retake": is_ret,
                     "date": (b_latest.get("date") or "") if b_latest else "",
                 })
-            # 2) Review test (기록별)
+            # 2) Review test (test_name 별)
             review_items_all = compute_review_test_records(student_records)
             for r in review_items_all:
+                r_score_num = r.get("numeric_score")
+                # test_name으로 rank 계산
+                r_rank = _rank_for(
+                    (lambda tn=r["test_name"]: (lambda rec: (rec.get("category") or "").strip() == tn))(),
+                    code,
+                )
+                # latest record 재구성 (compute_review는 이미 latest 사용)
+                fake_latest = {"score": r.get("score", "")}
+                display, is_ret = _format_test_display(fake_latest, r_score_num, review_threshold, "", r_rank)
                 all_tests_for_sms.append({
                     "key": f"review_{r['test_name']}",
                     "label": r["test_name"],
-                    "score": r["score"] or "-",
-                    "date": r["date"] or "",
+                    "display_text": display,
+                    "is_retake": is_ret,
+                    "date": r.get("date") or "",
                 })
-            # 3) 기타 카테고리 (최근 1건, 위에서 이미 잡힌 것 제외)
-            covered_categories = set()
-            for br in BOINGO_WORD_ROUNDS:
-                covered_categories.add(br["range"])
+            # 3) 기타 카테고리 (각 카테고리 최근 1건)
             other_cats = {}
             for r in student_records:
                 cat = (r.get("category") or "").strip()
                 if not cat:
                     continue
-                # 이미 review/boingo로 잡힌 것 제외
                 cat_lower = cat.lower()
                 if "review" in cat_lower or "리뷰" in cat_lower:
                     continue
                 if any(_record_matches_round(r, br["range"]) for br in BOINGO_WORD_ROUNDS):
                     continue
-                # 각 카테고리별 최근 기록만
                 if cat not in other_cats or r.get("date", "") > other_cats[cat].get("date", ""):
                     other_cats[cat] = r
             for cat, r in sorted(other_cats.items()):
+                r_score_num = _parse_score(r.get("score", ""))
+                r_rank = _rank_for(
+                    (lambda c=cat: (lambda rec: (rec.get("category") or "").strip() == c))(),
+                    code,
+                )
+                display, is_ret = _format_test_display(r, r_score_num, review_threshold, "", r_rank)
                 all_tests_for_sms.append({
                     "key": f"cat_{cat}",
                     "label": cat,
-                    "score": r.get("score") or "-",
+                    "display_text": display,
+                    "is_retake": is_ret,
                     "date": r.get("date") or "",
                 })
             students_data.append({
@@ -2347,6 +2432,7 @@ def admin_retakes():
         errors=errors,
         copy_all_lines=copy_all_lines,
         students_sms_data=students_sms_data,
+        pep_talks=PEP_TALKS,
     )
 
 
