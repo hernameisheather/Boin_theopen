@@ -877,6 +877,209 @@ def grade_retake(answers):
     }
 
 
+# ─── Review Test 4회차 재시험 (Day 14-6 ~ Day 16-2) — 자동 채점 ───────
+RETAKE4_CATEGORY = "Review Test 4회차 재시"
+RETAKE4_MAX = 40  # 20문항 × 2점
+
+# 객관식 12문항 (각 2점 = 24점): 문항번호, 정답(1-5), 해설
+RETAKE4_MC_KEY = [
+    {"n": 1,  "ans": 3, "type": "어색낱말",
+     "exp": "밑줄 친 부분 중 문맥상 부적절한 낱말은 ③."},
+    {"n": 2,  "ans": 5, "type": "주제",
+     "exp": "글의 주제는 ⑤ '평상 과학이 패러다임을 시험하기보다는 확장하는 보수적 성격'."},
+    {"n": 4,  "ans": 2, "type": "밑줄의미",
+     "exp": "밑줄이 의미하는 바는 ② 국가들이 상호 손실 vs 상호 이익 사이에서 냉엄한 선택에 직면한다는 것."},
+    {"n": 6,  "ans": 1, "type": "빈칸",
+     "exp": "빈칸에는 ① a matter of moral obligation into a paid service. 도덕적 의무가 유료 서비스로 전환되는 흐름."},
+    {"n": 7,  "ans": 3, "type": "요약(A)(B)",
+     "exp": "(A) climbed / (B) restored — ③."},
+    {"n": 9,  "ans": 4, "type": "제목",
+     "exp": "글의 제목은 ④ 'A Pleasure That Fades: The Hidden Cost of Bright Sound'."},
+    {"n": 11, "ans": 2, "type": "어색낱말",
+     "exp": "밑줄 친 부분 중 문맥상 부적절한 낱말은 ②."},
+    {"n": 12, "ans": 4, "type": "요약(A)(B)",
+     "exp": "(A) earliest / (B) shape — ④."},
+    {"n": 14, "ans": 5, "type": "빈칸",
+     "exp": "빈칸에는 ⑤ brains that were tuned to narrative left behind more descendants. 이야기 지향 뇌가 더 많은 자손 남김."},
+    {"n": 15, "ans": 2, "type": "제목",
+     "exp": "글의 제목은 ② 'Why the Brain Would Rather Hear a Story Than a Fact'."},
+    {"n": 17, "ans": 1, "type": "밑줄의미",
+     "exp": "밑줄이 의미하는 바는 ① 이 종들이 초래할 수 있는 생태적 피해를 예견하지 못한 채."},
+    {"n": 19, "ans": 5, "type": "주제",
+     "exp": "글의 주제는 ⑤ 자신의 무지를 인정하는 것이 진정한 배움의 출발점이 되는 방식."},
+]
+
+# 서술형 - 문맥상 어색한 단어 3문항 (각 2점 = 6점):
+#   4개 서브필드: (1) 어색한 문장 번호(1-7), (2) 어색한 단어, (3) 고친 단어, (4) 해당 문장 전체 해석
+#   자동 채점: (1)(2)(3) — 3개 모두 맞으면 2점, 2개 = 1.3점, 1개 = 0.7점, 0개 = 0점
+#   (4) 해석은 학생 답 저장만 (교사 확인용, 자동채점 X)
+RETAKE4_SA_WORD_KEY = [
+    {"n": "서02", "sent_no": 4, "wrong": "gain", "correct": "lose",
+     "translation_model": "역사상 대부분 두 정치체 간의 관계는 상호 파괴(전쟁) 또는 상호 손실 중 하나에 놓여 있었다. (문맥상 gain → lose)"},
+    {"n": "서04", "sent_no": 5, "wrong": "quieter", "correct": "louder",
+     "translation_model": "그러나 시간이 지나면서 청자는 그 밝은 소리가 지나치게 크게(더 크게) 느껴진다고 여기게 된다. (quieter → louder)"},
+    {"n": "서07", "sent_no": 2, "wrong": "benefit", "correct": "threat",
+     "translation_model": "외래 어종의 도입은 토종 생태계에 심각한 위협이 될 수 있다. (benefit → threat)"},
+]
+
+# 서술형 - 주제문 배열/영작 5문항 (각 2점 = 10점):
+#   학생이 정답 문장을 참고하여 스스로 O/X 체크 (self-graded)
+RETAKE4_SA_ESSAY_KEY = [
+    {"n": "서01", "model": "Normal science is a conservative puzzle-solving activity that extends rather than tests the reigning paradigm.",
+     "hint": "핵심어: normal science / conservative / puzzle-solving / extends rather than tests / paradigm"},
+    {"n": "서03", "model": "A market mindset can undermine an institution by replacing moral obligation with a paid service.",
+     "hint": "핵심어: market mindset / undermine / institution / replacing / moral obligation / paid service"},
+    {"n": "서05", "model": "Anchoring bias makes early information sway our judgment more than it should.",
+     "hint": "핵심어: anchoring bias / early information / sway / judgment / more than it should"},
+    {"n": "서06", "model": "Evolution shaped our minds to attend to stories because narrative-tuned brains left behind more descendants.",
+     "hint": "핵심어: evolution / minds / stories / narrative-tuned brains / descendants"},
+    {"n": "서08", "model": "Recognizing our own ignorance is what truly enables us to begin gaining real knowledge.",
+     "hint": "핵심어: recognizing / ignorance / enables / begin / gaining knowledge"},
+]
+
+RETAKE4_MC_POINTS = 2
+RETAKE4_SA_WORD_POINTS = 2   # 문항당 만점
+RETAKE4_SA_ESSAY_POINTS = 2  # 문항당 만점
+
+
+def _norm_word(s):
+    """소문자 + 앞뒤 공백 제거 + 문장부호 제거."""
+    s = (s or "").lower().strip()
+    for ch in [',', '.', '!', '?', '"', "'", "(", ")", ";", ":"]:
+        s = s.replace(ch, '')
+    return " ".join(s.split())
+
+
+def _parse_circled_num(s):
+    """①-⑦ 또는 1-7 → int 반환."""
+    s = (s or "").strip()
+    circled_map = {'①': 1, '②': 2, '③': 3, '④': 4, '⑤': 5, '⑥': 6, '⑦': 7,
+                   '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7}
+    if s in circled_map:
+        return circled_map[s]
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return 0
+
+
+def grade_retake4(answers):
+    """Review Test 4회차 재시험 채점.
+    answers = {
+        "mc": {"1": 3, "2": 5, ...},
+        "sa_word": {
+            "서02": {"sent_no": "4", "wrong": "gain", "correct": "lose", "translation": "..."},
+            ...
+        },
+        "sa_essay": {
+            "서01": {"text": "...", "self_check": "O"|"X"},  # 학생 자기채점
+            ...
+        }
+    }
+    """
+    answers = answers or {}
+    mc_in = answers.get("mc", {}) or {}
+    sa_word_in = answers.get("sa_word", {}) or {}
+    sa_essay_in = answers.get("sa_essay", {}) or {}
+
+    total_score = 0.0
+    max_score = 0.0
+
+    # ── 객관식 채점 ──
+    mc_results = []
+    mc_right = 0
+    for q in RETAKE4_MC_KEY:
+        try:
+            pick = int(mc_in.get(str(q["n"]), 0) or 0)
+        except (ValueError, TypeError):
+            pick = 0
+        ok = (pick == q["ans"])
+        pts = RETAKE4_MC_POINTS if ok else 0
+        if ok:
+            mc_right += 1
+        total_score += pts
+        max_score += RETAKE4_MC_POINTS
+        mc_results.append({
+            "n": q["n"], "type": q["type"], "pick": pick,
+            "ans": q["ans"], "ok": ok, "pts": pts, "exp": q["exp"],
+        })
+
+    # ── 서술형 - 문맥상 어색한 단어 채점 (자동) ──
+    saw_results = []
+    saw_correct_count = 0  # 완전 정답 문항 수
+    for k in RETAKE4_SA_WORD_KEY:
+        stu = sa_word_in.get(k["n"], {}) or {}
+        stu_sent = _parse_circled_num(stu.get("sent_no", ""))
+        stu_wrong = _norm_word(stu.get("wrong", ""))
+        stu_correct = _norm_word(stu.get("correct", ""))
+        stu_translation = (stu.get("translation") or "").strip()
+
+        sent_ok = (stu_sent == k["sent_no"])
+        wrong_ok = (stu_wrong == _norm_word(k["wrong"]))
+        correct_ok = (stu_correct == _norm_word(k["correct"]))
+
+        sub_correct = sum([sent_ok, wrong_ok, correct_ok])
+        # 3개 모두 → 2점, 2개 → 1.3점, 1개 → 0.7점, 0개 → 0점 (해석 채점 X)
+        if sub_correct == 3:
+            pts = 2.0
+            saw_correct_count += 1
+        elif sub_correct == 2:
+            pts = 1.3
+        elif sub_correct == 1:
+            pts = 0.7
+        else:
+            pts = 0.0
+
+        total_score += pts
+        max_score += RETAKE4_SA_WORD_POINTS
+        saw_results.append({
+            "n": k["n"],
+            "stu_sent": stu_sent, "ans_sent": k["sent_no"], "sent_ok": sent_ok,
+            "stu_wrong": stu.get("wrong", ""), "ans_wrong": k["wrong"], "wrong_ok": wrong_ok,
+            "stu_correct": stu.get("correct", ""), "ans_correct": k["correct"], "correct_ok": correct_ok,
+            "stu_translation": stu_translation,
+            "translation_model": k["translation_model"],
+            "sub_correct": sub_correct, "pts": pts,
+        })
+
+    # ── 서술형 - 주제문 영작 채점 (자기채점 O/X) ──
+    sae_results = []
+    sae_correct_count = 0
+    for k in RETAKE4_SA_ESSAY_KEY:
+        stu = sa_essay_in.get(k["n"], {}) or {}
+        stu_text = (stu.get("text") or "").strip()
+        self_check = (stu.get("self_check") or "").strip().upper()
+        # O = 자기채점 정답 → 2점, X = 오답 → 0점, 빈칸 = 0점
+        if self_check == "O" and stu_text:
+            pts = 2.0
+            sae_correct_count += 1
+        else:
+            pts = 0.0
+        total_score += pts
+        max_score += RETAKE4_SA_ESSAY_POINTS
+        sae_results.append({
+            "n": k["n"], "stu_text": stu_text, "model": k["model"],
+            "hint": k["hint"], "self_check": self_check, "pts": pts,
+        })
+
+    # 점수 반올림 (소수점 첫째 자리)
+    total_score = round(total_score, 1)
+
+    mc_str = f"{mc_right}/{len(RETAKE4_MC_KEY)}"
+    saw_str = f"{saw_correct_count}/{len(RETAKE4_SA_WORD_KEY)} 완전정답"
+    sae_str = f"{sae_correct_count}/{len(RETAKE4_SA_ESSAY_KEY)} 자기채점 O"
+    feedback = f"객관식 {mc_str} · 어색낱말 {saw_str} · 영작 {sae_str}"
+
+    return {
+        "score": total_score, "max": RETAKE4_MAX,
+        "mc_str": mc_str, "saw_str": saw_str, "sae_str": sae_str,
+        "feedback": feedback,
+        "mc_results": mc_results,
+        "saw_results": saw_results,
+        "sae_results": sae_results,
+    }
+
+
 def _build_word_test_row(round_info, student_records, deadlines=None, threshold=None):
     """단일 회차의 상태 정보를 계산 (내부 헬퍼, legacy용)."""
     if threshold is None:
@@ -1547,6 +1750,92 @@ def retake_submit():
             "time": stamp, "detail": result["detail"],
         }
         threading.Thread(target=_forward_to_gsheet, args=(payload,), daemon=True).start()
+
+    return result
+
+
+# ─── 라우트: Review Test 4회차 재시험 (Day 14-6 ~ Day 16-2) ───────────
+@app.route("/retake4")
+@parent_required
+def retake4_exam():
+    code = session["student_code"]
+    data = load_data()
+    student = data["students"].get(code)
+    if not student:
+        session.clear()
+        return redirect(url_for("login"))
+
+    # 이전 응시 기록 (최근 것)
+    prev_score = None
+    prev_date = None
+    for r in data["records"]:
+        if (r.get("student_code") == code
+                and r.get("category") == RETAKE4_CATEGORY):
+            if prev_date is None or (r.get("date") or "") >= prev_date:
+                prev_date = r.get("date")
+                prev_score = r.get("score")
+
+    return render_template(
+        "retake4_exam.html",
+        student_name=student["name"],
+        student_code=code,
+        prev_score=prev_score,
+        prev_date=prev_date,
+        exam_max=RETAKE4_MAX,
+        mc_key=RETAKE4_MC_KEY,
+        saw_key=RETAKE4_SA_WORD_KEY,
+        sae_key=RETAKE4_SA_ESSAY_KEY,
+    )
+
+
+@app.route("/retake4/submit", methods=["POST"])
+@parent_required
+def retake4_submit():
+    code = session["student_code"]
+    data = load_data()
+    if code not in data["students"]:
+        return {"error": "unknown student"}, 400
+
+    answers = request.get_json(silent=True) or {}
+    result = grade_retake4(answers)
+
+    # 학생 답안 요약 (교사 확인용 - feedback에 저장)
+    detail_lines = [result["feedback"]]
+
+    # 어색한 단어 (4) 해석 답안
+    trans_answers = []
+    for r in result["saw_results"]:
+        if r["stu_translation"]:
+            trans_answers.append(f"{r['n']}: {r['stu_translation'][:80]}")
+    if trans_answers:
+        detail_lines.append("[해석] " + " / ".join(trans_answers))
+
+    # 영작 답안 요약
+    essay_answers = []
+    for r in result["sae_results"]:
+        if r["stu_text"]:
+            essay_answers.append(f"{r['n']}({r['self_check'] or '?'}): {r['stu_text'][:60]}")
+    if essay_answers:
+        detail_lines.append("[영작] " + " / ".join(essay_answers))
+
+    feedback_full = " | ".join(detail_lines)[:500]  # 500자 제한
+
+    # 같은 학생의 기존 4회차 재시 기록 제거 후 1건으로 교체
+    today = datetime.now().strftime("%Y-%m-%d")
+    records = [r for r in data["records"]
+               if not (r.get("student_code") == code
+                       and r.get("category") == RETAKE4_CATEGORY)]
+    records.append({
+        "date": today,
+        "student_code": code,
+        "category": RETAKE4_CATEGORY,
+        "score": str(result["score"]),
+        "feedback": feedback_full,
+        "flag": "",
+        "resolved": False,
+        "term": DEFAULT_TERM,
+    })
+    save_data(data["students"], records)
 
     return result
 

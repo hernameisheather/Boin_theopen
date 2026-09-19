@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}Review Test 4회차 재시험{% endblock %}
+{% block content %}
+
+<header class="page-header">
+  <div>
+    <h1>📝 Review Test 4회차 재시험</h1>
+    <p class="muted small">
+      보신반 · Day 14[06] ~ Day 16[02] · 총 20문항 (40점 만점)<br>
+      응시자: <b>{{ student_name }}</b> <code class="muted small">{{ student_code }}</code>
+    </p>
+  </div>
+  <a href="{{ url_for('my_page') }}" class="btn-ghost">← 학생 페이지</a>
+</header>
+
+{% if prev_score is not none %}
+<section class="card" style="background:#fef3c7; border:1px solid #fcd34d;">
+  <p style="margin:0;">📌 최근 응시 기록: <b>{{ prev_score }}점</b> ({{ prev_date or '—' }})
+    <span class="muted small">— 재응시 시 이전 기록이 새 점수로 대체됩니다.</span></p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>📄 시험지 다운로드</h2>
+  <p>먼저 시험지를 다운로드하여 <b>직접 종이에 문제를 풀어주세요.</b>
+    그 후 아래 답안 입력란에 답을 입력하면 자동으로 채점됩니다.</p>
+  <p>
+    <a href="{{ url_for('static', filename='exam/ReviewTest_4회차_재시.docx') }}"
+       download class="btn-primary" style="display:inline-block; text-decoration:none;">
+      📥 재시험지 다운로드 (.docx)
+    </a>
+  </p>
+  <p class="muted small">
+    💡 다운로드가 안되면 링크를 우클릭 → "다른 이름으로 저장"을 눌러주세요.
+  </p>
+</section>
+
+<section class="card retake-notice">
+  <h2>⚠️ 응시 안내</h2>
+  <ul>
+    <li>총 <b>20문항 · 40점 만점</b></li>
+    <li><b>객관식 12문항</b> (각 2점, 24점): 자동 채점</li>
+    <li><b>서술형 - 문맥상 어색한 단어 3문항</b> (각 2점, 6점): 어색 문장 번호/단어/고침 자동 채점 + 해석 저장</li>
+    <li><b>서술형 - 주제문 영작 5문항</b> (각 2점, 10점): 정답 문장을 보고 <b>스스로 O/X 체크</b></li>
+    <li>제출 후 결과 및 정답 해설이 바로 표시됩니다.</li>
+  </ul>
+</section>
+
+<form id="retake4-form" onsubmit="return submitRetake4(event);">
+
+<!-- ── 객관식 ── -->
+<section class="card">
+  <h2>🔵 객관식 (12문항 × 2점 = 24점)</h2>
+  <p class="muted small">각 문항의 정답 번호를 선택하세요.</p>
+  <div class="retake4-mc-grid">
+    {% for q in mc_key %}
+    <div class="retake4-mc-item">
+      <div class="retake4-mc-label">
+        <b>{{ "%02d"|format(q.n) }}번</b>
+        <span class="muted small">{{ q.type }}</span>
+      </div>
+      <div class="retake4-mc-choices">
+        {% for i in range(1, 6) %}
+        <label class="retake4-choice">
+          <input type="radio" name="mc_{{ q.n }}" value="{{ i }}"> {{ ['①','②','③','④','⑤'][i-1] }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── 서술형 어색한 단어 ── -->
+<section class="card">
+  <h2>🟠 서술형 - 문맥상 어색한 단어 (3문항 × 2점 = 6점)</h2>
+  <p class="muted small">
+    각 문항마다 (1) 어색한 문장 번호, (2) 원래 단어, (3) 올바른 단어, (4) 해당 문장 해석을 입력하세요.<br>
+    자동 채점 대상: (1)(2)(3). 해석은 별도로 저장되어 선생님이 확인하실 예정입니다.
+  </p>
+  {% for k in saw_key %}
+  <div class="retake4-saw-item">
+    <h3>{{ k.n }} <span class="muted small">[2점]</span></h3>
+    <div class="retake4-saw-grid">
+      <label class="retake4-field">
+        <span>(1) 어색한 문장 번호</span>
+        <select name="saw_{{ k.n }}_sent">
+          <option value="">선택</option>
+          {% for i in range(1, 8) %}
+          <option value="{{ i }}">{{ ['①','②','③','④','⑤','⑥','⑦'][i-1] }} ({{ i }}번)</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="retake4-field">
+        <span>(2) 문맥상 어색한 단어</span>
+        <input type="text" name="saw_{{ k.n }}_wrong" placeholder="원문의 어색한 단어" autocomplete="off">
+      </label>
+      <label class="retake4-field">
+        <span>(3) 올바르게 고친 단어</span>
+        <input type="text" name="saw_{{ k.n }}_correct" placeholder="문맥에 맞는 단어" autocomplete="off">
+      </label>
+      <label class="retake4-field retake4-full">
+        <span>(4) 해당 문장 전체 해석</span>
+        <textarea name="saw_{{ k.n }}_translation" rows="2"
+                  placeholder="해당 문장을 한국어로 자연스럽게 해석하세요."></textarea>
+      </label>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+<!-- ── 서술형 주제문 영작 ── -->
+<section class="card">
+  <h2>🟢 서술형 - 주제문 영작 (5문항 × 2점 = 10점)</h2>
+  <p class="muted small">
+    각 문항마다 &lt;조건&gt;에 맞게 주제문을 영작하세요. 제출 후 정답 문장이 표시되면
+    <b>자신의 답과 비교하여 O/X를 정직하게 체크</b>해주세요.<br>
+    ⚠️ 정답과 완전히 일치할 필요는 없습니다. <b>핵심 의미가 살아있고 문법이 맞으면 O</b>로 체크하세요.
+  </p>
+  {% for k in sae_key %}
+  <div class="retake4-sae-item">
+    <h3>{{ k.n }} <span class="muted small">[2점]</span></h3>
+    <label class="retake4-field retake4-full">
+      <span>내 영작</span>
+      <textarea name="sae_{{ k.n }}_text" rows="2"
+                placeholder="주제문을 영작하세요."></textarea>
+    </label>
+    <div class="retake4-sae-hint muted small" id="hint_{{ k.n }}" style="display:none;">
+      <b>모범답:</b> {{ k.model }}<br>
+      <b>핵심어:</b> {{ k.hint }}
+    </div>
+    <div class="retake4-selfcheck" id="selfcheck_{{ k.n }}" style="display:none;">
+      <b>자기 채점:</b>
+      <label><input type="radio" name="sae_{{ k.n }}_check" value="O"> ✅ O (정답)</label>
+      <label><input type="radio" name="sae_{{ k.n }}_check" value="X"> ❌ X (오답)</label>
+    </div>
+  </div>
+  {% endfor %}
+  <p class="muted small">
+    <b>💡 팁:</b> 아래 "모범답 보기" 버튼을 눌러 정답을 확인한 뒤 O/X를 체크한 후, 제출하세요.
+  </p>
+  <button type="button" onclick="revealEssayModels()" class="btn-ghost" id="reveal-btn">
+    🔍 모범답 확인 & 자기 채점 시작
+  </button>
+</section>
+
+<section class="card" style="text-align:center;">
+  <button type="submit" class="btn-primary" style="font-size:16px; padding:14px 32px;">
+    📤 답안 제출 & 자동 채점
+  </button>
+  <p class="muted small" style="margin-top:8px;">제출 후 결과와 정답 해설이 표시됩니다.</p>
+</section>
+
+</form>
+
+<!-- 결과 영역 -->
+<section id="retake4-result" class="card" style="display:none;">
+  <h2>📊 채점 결과</h2>
+  <div id="result-body"></div>
+  <p style="text-align:center; margin-top:16px;">
+    <a href="{{ url_for('my_page') }}" class="btn-primary">← 학생 페이지로 돌아가기</a>
+  </p>
+</section>
+
+<style>
+.retake4-mc-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; }
+.retake4-mc-item { border:1px solid #e5e7eb; border-radius:8px; padding:12px; background:#fafafa; }
+.retake4-mc-label { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.retake4-mc-choices { display:flex; gap:8px; flex-wrap:wrap; }
+.retake4-choice { display:inline-flex; align-items:center; gap:3px; padding:6px 10px; border:1px solid #e5e7eb; border-radius:6px; cursor:pointer; background:#fff; }
+.retake4-choice:hover { background:#f0f9ff; border-color:#3b82f6; }
+.retake4-choice input:checked + span,
+.retake4-choice:has(input:checked) { background:#dbeafe; border-color:#2563eb; }
+
+.retake4-saw-item, .retake4-sae-item { border:1px solid #e5e7eb; border-radius:8px; padding:14px; background:#fafafa; margin-bottom:12px; }
+.retake4-saw-item h3, .retake4-sae-item h3 { margin:0 0 10px; }
+.retake4-saw-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; }
+.retake4-field { display:flex; flex-direction:column; gap:4px; }
+.retake4-field span { font-weight:600; font-size:13px; }
+.retake4-field input, .retake4-field select, .retake4-field textarea {
+  padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; font-family:inherit;
+}
+.retake4-full { grid-column: 1 / -1; }
+.retake4-sae-hint { margin:8px 0; padding:8px 10px; background:#fef3c7; border-radius:6px; }
+.retake4-selfcheck { margin-top:8px; padding:8px 10px; background:#dbeafe; border-radius:6px; }
+.retake4-selfcheck label { margin-right:16px; cursor:pointer; }
+
+.result-summary { padding:20px; text-align:center; background:linear-gradient(135deg, #dbeafe, #e0e7ff); border-radius:12px; margin-bottom:16px; }
+.result-summary .big-score { font-size:48px; font-weight:900; color:#1e40af; }
+.result-summary .big-score small { font-size:20px; color:#64748b; }
+.result-detail { margin-top:12px; }
+.result-row { display:flex; gap:12px; padding:8px 12px; border-bottom:1px solid #f3f4f6; }
+.result-row.ok { background:#f0fdf4; }
+.result-row.bad { background:#fef2f2; }
+.result-row .num { font-weight:700; min-width:60px; }
+.result-row .exp { flex:1; color:#374151; font-size:13.5px; }
+.result-row .pts { font-weight:700; min-width:60px; text-align:right; }
+
+.retake-notice ul { padding-left:20px; }
+.retake-notice li { margin-bottom:4px; }
+</style>
+
+<script>
+const MC_KEY = {{ mc_key | tojson }};
+const SAW_KEY = {{ saw_key | tojson }};
+const SAE_KEY = {{ sae_key | tojson }};
+
+function revealEssayModels() {
+  SAE_KEY.forEach(function(k) {
+    document.getElementById('hint_' + k.n).style.display = 'block';
+    document.getElementById('selfcheck_' + k.n).style.display = 'block';
+  });
+  document.getElementById('reveal-btn').disabled = true;
+  document.getElementById('reveal-btn').textContent = '✅ 모범답 확인 완료 - O/X 체크 후 제출하세요';
+}
+
+async function submitRetake4(e) {
+  e.preventDefault();
+  const form = document.getElementById('retake4-form');
+  const fd = new FormData(form);
+
+  // MC 답안 수집
+  const mc = {};
+  MC_KEY.forEach(function(q) {
+    const val = fd.get('mc_' + q.n);
+    if (val) mc[q.n] = parseInt(val, 10);
+  });
+
+  // SA-Word 답안 수집
+  const sa_word = {};
+  SAW_KEY.forEach(function(k) {
+    sa_word[k.n] = {
+      sent_no: fd.get('saw_' + k.n + '_sent') || '',
+      wrong: fd.get('saw_' + k.n + '_wrong') || '',
+      correct: fd.get('saw_' + k.n + '_correct') || '',
+      translation: fd.get('saw_' + k.n + '_translation') || '',
+    };
+  });
+
+  // SA-Essay 답안 수집
+  const sa_essay = {};
+  SAE_KEY.forEach(function(k) {
+    sa_essay[k.n] = {
+      text: fd.get('sae_' + k.n + '_text') || '',
+      self_check: fd.get('sae_' + k.n + '_check') || '',
+    };
+  });
+
+  // 미응답 안내
+  const mc_missing = MC_KEY.filter(function(q) { return !mc[q.n]; });
+  if (mc_missing.length > 0) {
+    if (!confirm('객관식 미응답 문항이 ' + mc_missing.length + '개 있습니다. 그래도 제출하시겠습니까?')) return false;
+  }
+
+  const btn = form.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = '⏳ 채점 중...';
+
+  try {
+    const res = await fetch('{{ url_for("retake4_submit") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ mc: mc, sa_word: sa_word, sa_essay: sa_essay }),
+    });
+    if (!res.ok) throw new Error('서버 오류: ' + res.status);
+    const result = await res.json();
+    renderResult(result);
+    form.style.display = 'none';
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } catch (err) {
+    alert('제출 실패: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = '📤 답안 제출 & 자동 채점';
+  }
+  return false;
+}
+
+function renderResult(result) {
+  const box = document.getElementById('retake4-result');
+  const body = document.getElementById('result-body');
+  const CIRCLED = ['', '①', '②', '③', '④', '⑤', '⑥', '⑦'];
+
+  let html = '<div class="result-summary">';
+  html += '<div class="muted">최종 점수</div>';
+  html += '<div class="big-score">' + result.score + '<small> / ' + result.max + '점</small></div>';
+  html += '<div class="muted small">' + result.feedback + '</div>';
+  html += '</div>';
+
+  // MC 상세
+  html += '<h3>🔵 객관식 상세 (' + result.mc_str + ')</h3>';
+  result.mc_results.forEach(function(m) {
+    const cls = m.ok ? 'ok' : 'bad';
+    const pick = m.pick > 0 ? CIRCLED[m.pick] : '—';
+    const ans = CIRCLED[m.ans];
+    html += '<div class="result-row ' + cls + '">';
+    html += '<span class="num">' + String(m.n).padStart(2, '0') + '번</span>';
+    html += '<span class="exp"><b>' + (m.ok ? '✅' : '❌') + '</b> 내 답 ' + pick + ' / 정답 <b>' + ans + '</b> — ' + m.exp + '</span>';
+    html += '<span class="pts">' + m.pts + '점</span>';
+    html += '</div>';
+  });
+
+  // SA-Word 상세
+  html += '<h3 style="margin-top:16px;">🟠 문맥상 어색한 단어 상세</h3>';
+  result.saw_results.forEach(function(r) {
+    const cls = r.sub_correct === 3 ? 'ok' : (r.sub_correct >= 1 ? '' : 'bad');
+    html += '<div class="result-row ' + cls + '">';
+    html += '<span class="num">' + r.n + '</span>';
+    html += '<span class="exp">';
+    html += '(1) 문장번호 ' + (r.sent_ok ? '✅' : '❌') + ': 내 답 <b>' + (r.stu_sent > 0 ? CIRCLED[r.stu_sent] : '—') + '</b>, 정답 <b>' + CIRCLED[r.ans_sent] + '</b><br>';
+    html += '(2) 어색단어 ' + (r.wrong_ok ? '✅' : '❌') + ': 내 답 <b>' + (r.stu_wrong || '—') + '</b>, 정답 <b>' + r.ans_wrong + '</b><br>';
+    html += '(3) 고친단어 ' + (r.correct_ok ? '✅' : '❌') + ': 내 답 <b>' + (r.stu_correct || '—') + '</b>, 정답 <b>' + r.ans_correct + '</b><br>';
+    html += '(4) 해석: ' + (r.stu_translation ? r.stu_translation : '<i>미응답</i>') + '<br>';
+    html += '<span class="muted small">모범 해석: ' + r.translation_model + '</span>';
+    html += '</span>';
+    html += '<span class="pts">' + r.pts + '점</span>';
+    html += '</div>';
+  });
+
+  // SA-Essay 상세
+  html += '<h3 style="margin-top:16px;">🟢 주제문 영작 상세</h3>';
+  result.sae_results.forEach(function(r) {
+    const cls = r.self_check === 'O' ? 'ok' : (r.stu_text ? 'bad' : '');
+    html += '<div class="result-row ' + cls + '">';
+    html += '<span class="num">' + r.n + '</span>';
+    html += '<span class="exp">';
+    html += '자기채점: <b>' + (r.self_check || '미체크') + '</b><br>';
+    html += '내 답: ' + (r.stu_text || '<i>미응답</i>') + '<br>';
+    html += '<span class="muted small">모범답: ' + r.model + '</span>';
+    html += '</span>';
+    html += '<span class="pts">' + r.pts + '점</span>';
+    html += '</div>';
+  });
+
+  body.innerHTML = html;
+  box.style.display = 'block';
+}
+</script>
+
+{% endblock %}
