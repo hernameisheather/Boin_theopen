@@ -66,6 +66,125 @@
 </section>
 {% else %}
 
+<!-- ─── 뷰 전환 탭 ─── -->
+<section class="card view-switch-card">
+  <div class="view-switch-tabs">
+    <button type="button" class="view-tab active" id="tab-by-student" onclick="switchView('student')">
+      👤 학생별 보기
+    </button>
+    <button type="button" class="view-tab" id="tab-by-test" onclick="switchView('test')">
+      📝 시험별 보기 (일괄 문자 발송)
+    </button>
+  </div>
+</section>
+
+<!-- ─── 시험별 보기 (일괄 문자 발송) ─── -->
+<div id="view-by-test" style="display:none;">
+  {% if tests_data %}
+  <section class="card">
+    <h2>📝 시험별 재시험 대상 & 일괄 문자 발송</h2>
+    <p class="muted small">
+      아래 시험을 펼쳐 학생별로 <b>[학생]/[학부모]</b> 발송 대상을 체크한 뒤
+      <b>선택 대상에게 문자 발송</b> 버튼을 누르세요. 문자가 한 명씩 순차로 열립니다.
+    </p>
+  </section>
+
+  {% for t in tests_data %}
+  <section class="card test-card" data-test-key="{{ t.key }}">
+    <h2>
+      📝 <b>{{ t.label }}</b>
+      <span class="retake-summary-tag" style="background:#fef3c7;">
+        재시 대상 <b>{{ t.count }}</b>명
+      </span>
+    </h2>
+
+    <div class="bulk-toolbar">
+      <label class="bulk-checkall">
+        <input type="checkbox" onclick="toggleAllInTest('{{ t.key }}', 'student', this.checked)">
+        👥 학생 전원 선택
+      </label>
+      <label class="bulk-checkall">
+        <input type="checkbox" onclick="toggleAllInTest('{{ t.key }}', 'parent', this.checked)">
+        👨‍👩‍👦 학부모 전원 선택
+      </label>
+      <button type="button" class="btn-primary btn-bulk-send"
+              onclick="sendBulkForTest('{{ t.key }}')">
+        📤 선택 대상에게 문자 발송 →
+      </button>
+      <span class="muted small" id="count-{{ t.key }}">0명 선택됨</span>
+    </div>
+
+    <table class="records test-student-table">
+      <thead>
+        <tr>
+          <th style="width:120px">학생명</th>
+          <th style="width:230px">점수 / 사유</th>
+          <th style="width:130px">학생 번호</th>
+          <th style="width:130px">어머님 번호</th>
+          <th style="width:110px; text-align:center;">학생 문자</th>
+          <th style="width:110px; text-align:center;">어머님 문자</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for st in t.students %}
+        <tr>
+          <td><b>{{ st.name }}</b> <code class="muted small">{{ st.code }}</code></td>
+          <td>
+            <span class="test-score-cell">{{ st.display_text }}</span>
+            {% if st.date %}<br><span class="muted small">📅 {{ st.date }}</span>{% endif %}
+          </td>
+          <td>
+            {% if st.student_phone_raw %}
+              <code>{{ st.student_phone_raw }}</code>
+            {% else %}
+              <span class="phone-missing">미등록</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if st.parent_phone_raw %}
+              <code>{{ st.parent_phone_raw }}</code>
+            {% else %}
+              <span class="phone-missing">미등록</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if st.student_phone_raw %}
+              <input type="checkbox"
+                     class="bulk-cb bulk-cb-student"
+                     data-test="{{ t.key }}" data-code="{{ st.code }}"
+                     data-role="student"
+                     onchange="updateBulkCount('{{ t.key }}')">
+            {% else %}
+              <span class="muted small">—</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if st.parent_phone_raw %}
+              <input type="checkbox"
+                     class="bulk-cb bulk-cb-parent"
+                     data-test="{{ t.key }}" data-code="{{ st.code }}"
+                     data-role="parent"
+                     onchange="updateBulkCount('{{ t.key }}')">
+            {% else %}
+              <span class="muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+  {% else %}
+  <section class="card empty">
+    <p>🎉 현재 재시 필요 시험이 없습니다.</p>
+  </section>
+  {% endif %}
+</div>
+
+<!-- ─── 학생별 보기 (기존) ─── -->
+<div id="view-by-student">
+
 {% for s in students_data %}
 <section class="card retake-student-card {% if s.pending_count > 0 %}retake-pending-card{% endif %}">
   <h2>
@@ -146,11 +265,103 @@
   </table>
 </section>
 {% endfor %}
+</div><!-- /view-by-student -->
 {% endif %}
+
+<!-- ─── 일괄 발송 진행 모달 ─── -->
+<div id="bulk-modal" class="bulk-modal" style="display:none;">
+  <div class="bulk-modal-inner">
+    <h2>📤 일괄 문자 발송 진행 중</h2>
+    <div class="bulk-progress">
+      <div class="bulk-progress-bar"><div id="bulk-progress-fill"></div></div>
+      <p id="bulk-progress-text" class="muted small">0 / 0</p>
+    </div>
+    <div id="bulk-current-item" class="bulk-current-item"></div>
+    <div class="bulk-actions">
+      <button type="button" id="bulk-open-btn" class="btn-primary" onclick="openCurrentSMS()">
+        📱 문자 앱 열기
+      </button>
+      <button type="button" id="bulk-next-btn" class="btn-ghost" onclick="nextBulkItem()">
+        ✅ 보냈어요, 다음 →
+      </button>
+      <button type="button" id="bulk-skip-btn" class="btn-ghost" onclick="skipBulkItem()">
+        ⏭️ 이 사람 건너뛰기
+      </button>
+      <button type="button" id="bulk-cancel-btn" class="btn-ghost" onclick="cancelBulk()">
+        ✖ 중단
+      </button>
+    </div>
+    <div id="bulk-done" class="bulk-done" style="display:none;">
+      <p style="text-align:center; font-size:18px; color:#059669;">
+        <b>✅ 모든 대상자에게 문자 발송을 완료했습니다.</b>
+      </p>
+      <p class="muted small" id="bulk-done-summary" style="text-align:center;"></p>
+      <div style="text-align:center; margin-top:12px;">
+        <button type="button" class="btn-primary" onclick="closeBulkModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.view-switch-card { padding:0; }
+.view-switch-tabs { display:flex; gap:0; }
+.view-tab {
+  flex:1; padding:14px 20px; border:none; background:#f3f4f6; color:#6b7280;
+  cursor:pointer; font-size:15px; font-weight:600; border-bottom:3px solid transparent;
+  transition:all .15s;
+}
+.view-tab:hover { background:#e5e7eb; color:#1f2937; }
+.view-tab.active { background:#fff; color:#2563eb; border-bottom-color:#2563eb; }
+
+.test-card { border:1px solid #e5e7eb; }
+.test-card h2 { display:flex; align-items:center; gap:8px; }
+
+.bulk-toolbar {
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:12px 14px; background:#fef3c7; border-radius:8px; margin:10px 0;
+}
+.bulk-checkall { display:inline-flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; }
+.btn-bulk-send { font-size:14px; padding:10px 16px; }
+
+.test-student-table { width:100%; }
+.test-student-table td { padding:8px 10px; vertical-align:middle; }
+.test-score-cell { font-weight:600; color:#dc2626; }
+.phone-missing { color:#9ca3af; font-size:12px; }
+
+/* 모달 */
+.bulk-modal {
+  position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.bulk-modal-inner {
+  background:#fff; border-radius:14px; padding:24px; max-width:520px; width:100%;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);
+}
+.bulk-modal h2 { margin:0 0 16px; }
+.bulk-progress { margin-bottom:16px; }
+.bulk-progress-bar {
+  height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; margin-bottom:6px;
+}
+#bulk-progress-fill { height:100%; background:#2563eb; width:0; transition:width .3s; }
+.bulk-current-item {
+  padding:14px 16px; background:#f3f4f6; border-radius:8px; margin-bottom:16px;
+  font-size:15px;
+}
+.bulk-current-item .who { font-weight:700; font-size:16px; margin-bottom:6px; }
+.bulk-current-item .phone { color:#2563eb; font-family:monospace; }
+.bulk-current-item .preview {
+  margin-top:10px; padding:10px; background:#fff; border:1px solid #e5e7eb;
+  border-radius:6px; font-size:13px; white-space:pre-wrap; max-height:150px; overflow-y:auto;
+}
+.bulk-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.bulk-actions button { padding:10px 16px; font-size:14px; }
+</style>
 
 <script>
 const RETAKE_TEXT_LINES = {{ copy_all_lines | tojson }};
 const STUDENT_SMS_DATA = {{ students_sms_data | tojson }};
+const TESTS_DATA = {{ tests_data | tojson }};
 
 function copyAllRetakeMessage() {
   const text = RETAKE_TEXT_LINES.join("\n");
@@ -235,6 +446,174 @@ function openSMS(code, recipient) {
   }
   const body = buildScoreSMS(s, testsToInclude);
   window.location.href = "sms:" + phone + "?body=" + encodeURIComponent(body);
+}
+
+// ─── 뷰 전환 (학생별 / 시험별) ────────────────────────
+function switchView(mode) {
+  const byStudent = document.getElementById('view-by-student');
+  const byTest = document.getElementById('view-by-test');
+  const tabStu = document.getElementById('tab-by-student');
+  const tabTest = document.getElementById('tab-by-test');
+  if (mode === 'test') {
+    byStudent.style.display = 'none';
+    byTest.style.display = 'block';
+    tabStu.classList.remove('active');
+    tabTest.classList.add('active');
+  } else {
+    byStudent.style.display = 'block';
+    byTest.style.display = 'none';
+    tabStu.classList.add('active');
+    tabTest.classList.remove('active');
+  }
+}
+
+// ─── 시험별 뷰: 전체 선택 / 카운트 갱신 ─────────────
+function toggleAllInTest(testKey, role, checked) {
+  const cbs = document.querySelectorAll(`input.bulk-cb-${role}[data-test="${testKey}"]`);
+  cbs.forEach(function(cb) { cb.checked = checked; });
+  updateBulkCount(testKey);
+}
+
+function updateBulkCount(testKey) {
+  const cbs = document.querySelectorAll(`input.bulk-cb[data-test="${testKey}"]:checked`);
+  const el = document.getElementById('count-' + testKey);
+  if (el) el.textContent = cbs.length + '명(건) 선택됨';
+}
+
+// ─── 일괄 발송 큐 ────────────────────────────────────
+let BULK_QUEUE = [];
+let BULK_INDEX = 0;
+let BULK_SENT = 0;
+let BULK_SKIPPED = 0;
+
+function sendBulkForTest(testKey) {
+  // 이 시험의 선택된 체크박스들 수집
+  const cbs = document.querySelectorAll(`input.bulk-cb[data-test="${testKey}"]:checked`);
+  if (cbs.length === 0) {
+    alert('발송 대상을 최소 1명 선택하세요.');
+    return;
+  }
+  // 시험 정보 찾기
+  const test = TESTS_DATA.find(function(t) { return t.key === testKey; });
+  if (!test) { alert('시험 정보 오류'); return; }
+
+  // 큐 구성
+  BULK_QUEUE = [];
+  cbs.forEach(function(cb) {
+    const code = cb.getAttribute('data-code');
+    const role = cb.getAttribute('data-role');
+    const stu = test.students.find(function(x) { return x.code === code; });
+    if (!stu) return;
+    const phone = role === 'student' ? stu.student_phone_raw : stu.parent_phone_raw;
+    if (!phone) return;
+    // SMS 본문: 이 시험 한 건만 담아 발송 (해당 시험만 재시험 안내)
+    const body = "[보인고영어=신쌤] " + stu.name + " 학생★시험 성적 안내:"
+               + "\n· " + test.label + ": " + stu.display_text
+               + "\n\n" + pickPepTalk();
+    BULK_QUEUE.push({
+      name: stu.name,
+      code: stu.code,
+      role: role,
+      role_label: role === 'student' ? '학생' : '어머님',
+      phone: phone,
+      body: body,
+      test_label: test.label,
+    });
+  });
+
+  if (BULK_QUEUE.length === 0) {
+    alert('선택된 대상 중 발송 가능한 번호가 없습니다.');
+    return;
+  }
+
+  // 발송 대상 확인
+  const preview = BULK_QUEUE.slice(0, 5).map(function(x) { return `${x.name}(${x.role_label})`; }).join(', ');
+  const more = BULK_QUEUE.length > 5 ? ` 외 ${BULK_QUEUE.length - 5}명` : '';
+  if (!confirm(`총 ${BULK_QUEUE.length}건 발송을 시작합니다.\n\n대상: ${preview}${more}\n\n하나씩 순차로 문자 앱이 열립니다. 계속하시겠습니까?`)) {
+    return;
+  }
+
+  BULK_INDEX = 0;
+  BULK_SENT = 0;
+  BULK_SKIPPED = 0;
+  showBulkModal();
+  renderBulkCurrent();
+}
+
+function showBulkModal() {
+  document.getElementById('bulk-modal').style.display = 'flex';
+  document.getElementById('bulk-done').style.display = 'none';
+  document.getElementById('bulk-open-btn').style.display = '';
+  document.getElementById('bulk-next-btn').style.display = '';
+  document.getElementById('bulk-skip-btn').style.display = '';
+  document.getElementById('bulk-cancel-btn').style.display = '';
+}
+
+function closeBulkModal() {
+  document.getElementById('bulk-modal').style.display = 'none';
+  BULK_QUEUE = [];
+  BULK_INDEX = 0;
+}
+
+function cancelBulk() {
+  if (BULK_INDEX < BULK_QUEUE.length) {
+    if (!confirm('일괄 발송을 중단하시겠습니까?')) return;
+  }
+  closeBulkModal();
+}
+
+function renderBulkCurrent() {
+  const total = BULK_QUEUE.length;
+  const idx = BULK_INDEX;
+  const fill = document.getElementById('bulk-progress-fill');
+  const txt = document.getElementById('bulk-progress-text');
+  fill.style.width = (idx / total * 100) + '%';
+  txt.textContent = `${idx} / ${total} 완료 (보냄 ${BULK_SENT}, 건너뜀 ${BULK_SKIPPED})`;
+
+  if (idx >= total) {
+    // 완료
+    document.getElementById('bulk-current-item').innerHTML = '';
+    document.getElementById('bulk-open-btn').style.display = 'none';
+    document.getElementById('bulk-next-btn').style.display = 'none';
+    document.getElementById('bulk-skip-btn').style.display = 'none';
+    document.getElementById('bulk-cancel-btn').style.display = 'none';
+    document.getElementById('bulk-done').style.display = 'block';
+    document.getElementById('bulk-done-summary').textContent =
+      `총 ${total}건 중 ${BULK_SENT}건 발송, ${BULK_SKIPPED}건 건너뜀`;
+    fill.style.width = '100%';
+    return;
+  }
+
+  const cur = BULK_QUEUE[idx];
+  const box = document.getElementById('bulk-current-item');
+  box.innerHTML =
+    `<div class="who">${cur.name} <span class="muted small">(${cur.role_label})</span></div>`
+    + `<div>📱 <span class="phone">${cur.phone}</span></div>`
+    + `<div class="preview">${cur.body.replace(/</g, '&lt;')}</div>`;
+}
+
+function openCurrentSMS() {
+  if (BULK_INDEX >= BULK_QUEUE.length) return;
+  const cur = BULK_QUEUE[BULK_INDEX];
+  // 앵커 클릭으로 sms: 열기 (현재 페이지 유지)
+  const a = document.createElement('a');
+  a.href = 'sms:' + cur.phone + '?body=' + encodeURIComponent(cur.body);
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function nextBulkItem() {
+  BULK_SENT++;
+  BULK_INDEX++;
+  renderBulkCurrent();
+}
+
+function skipBulkItem() {
+  BULK_SKIPPED++;
+  BULK_INDEX++;
+  renderBulkCurrent();
 }
 </script>
 {% endblock %}

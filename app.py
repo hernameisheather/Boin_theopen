@@ -2713,9 +2713,47 @@ def admin_retakes():
             "all_tests": s["all_tests"],
         }
 
+    # ── 시험별 뷰 데이터 구성 ─────────────────────────
+    # 각 학생의 all_tests(재시 필요/미응시)를 시험 단위로 뒤집어 그룹화
+    tests_map = {}  # test_key -> {"label": ..., "students": [ ... ]}
+    for s in students_data:
+        for t in s["all_tests"]:
+            if not t.get("is_retake"):
+                continue  # PASS는 스킵 (재시 대상만)
+            key = t["key"]
+            if key not in tests_map:
+                tests_map[key] = {
+                    "key": key,
+                    "label": t["label"],
+                    "students": [],
+                }
+            tests_map[key]["students"].append({
+                "code": s["code"],
+                "name": s["name"],
+                "student_phone_raw": s["student_phone_raw"],
+                "parent_phone_raw": s["parent_phone_raw"],
+                "display_text": t["display_text"],
+                "date": t.get("date") or "",
+            })
+
+    # 시험별 정렬: 단어 → Review → 기타 순, 각 그룹 내 라벨 알파벳
+    def _test_sort_key(item):
+        k = item["key"]
+        if k.startswith("boingo_"):
+            return (0, item["label"])
+        if k.startswith("review_"):
+            return (1, item["label"])
+        return (2, item["label"])
+
+    tests_data = sorted(tests_map.values(), key=_test_sort_key)
+    for t in tests_data:
+        t["students"].sort(key=lambda x: x["name"])
+        t["count"] = len(t["students"])
+
     return render_template(
         "admin_retakes.html",
         students_data=students_data,
+        tests_data=tests_data,
         total_pending=total_pending,
         total_items=total_items,
         errors=errors,
