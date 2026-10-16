@@ -377,8 +377,22 @@ def records_for(student_code):
 
 
 # ─── 학기/과정 (Term) 구분 ────────────────────────────────
-TERMS = ["2학기 정규반", "방학특강"]
-DEFAULT_TERM = "2학기 정규반"
+# 신규(기본): "2학기 기말대비" / 레거시 유지: "2학기 중간대비"(=2학기 정규반), "방학특강"(겨울방학특강)
+TERMS = ["2학기 기말대비", "2학기 중간대비", "2학기 정규반", "방학특강"]
+DEFAULT_TERM = "2학기 기말대비"
+# 과거 기록의 레거시 term 값과 UI 라벨 매핑 (표시용)
+TERM_DISPLAY_LABELS = {
+    "2학기 기말대비": "2학기 기말대비",
+    "2학기 중간대비": "2학기 중간대비",
+    "2학기 정규반": "2학기 중간대비",   # 레거시: "2학기 정규반" 기록을 "2학기 중간대비"로 노출
+    "방학특강": "겨울방학특강",         # 레거시: "방학특강" 기록을 "겨울방학특강"으로 노출
+}
+# UI에 노출할 학생용 섹션 순서: (내부 term 값, 화면 라벨)
+STUDENT_TERM_SECTIONS = [
+    ("2학기 기말대비", "2학기 기말대비"),
+    ("2학기 정규반",   "2학기 중간대비"),
+    ("방학특강",       "겨울방학특강"),
+]
 _TERM_MIGRATION_MARKER = os.path.join(DATA_DIR, ".term_migration_v1.json")
 
 
@@ -1080,6 +1094,59 @@ def grade_retake4(answers):
     }
 
 
+# ─── 재시험 상세 응시 결과 저장 (JSON) ─────────────────
+RETAKE4_SUBMISSIONS_FILE = os.path.join(DATA_DIR, "retake4_submissions.json")
+
+
+def load_retake4_submissions():
+    """저장된 응시 결과 리스트를 반환 (최신순)."""
+    import json
+    if not os.path.exists(RETAKE4_SUBMISSIONS_FILE):
+        return []
+    try:
+        with open(RETAKE4_SUBMISSIONS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        print(f"[WARN] retake4 submissions load failed: {e}")
+        return []
+
+
+def save_retake4_submission(entry):
+    """entry(dict)를 리스트에 추가/교체 (같은 학생 코드는 최신 것으로 대체)."""
+    import json
+    os.makedirs(DATA_DIR, exist_ok=True)
+    subs = load_retake4_submissions()
+    code = entry.get("student_code", "")
+    subs = [s for s in subs if s.get("student_code") != code]
+    subs.append(entry)
+    subs.sort(key=lambda s: s.get("submitted_at", ""), reverse=True)
+    with open(RETAKE4_SUBMISSIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(subs, f, ensure_ascii=False, indent=2)
+
+
+def override_retake4_score(student_code, new_score):
+    """관리자가 서술형 점수 반영 등으로 점수를 수정. records + submissions 모두 갱신."""
+    data = load_data()
+    updated = False
+    for r in data["records"]:
+        if (r.get("student_code") == student_code
+                and r.get("category") == RETAKE4_CATEGORY):
+            r["score"] = str(new_score)
+            updated = True
+    if updated:
+        save_data(data["students"], data["records"])
+    subs = load_retake4_submissions()
+    for s in subs:
+        if s.get("student_code") == student_code:
+            s["override_score"] = new_score
+    import json
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(RETAKE4_SUBMISSIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(subs, f, ensure_ascii=False, indent=2)
+    return updated
+
+
 def _build_word_test_row(round_info, student_records, deadlines=None, threshold=None):
     """단일 회차의 상태 정보를 계산 (내부 헬퍼, legacy용)."""
     if threshold is None:
@@ -1531,11 +1598,17 @@ def my_page():
         session.clear()
         return redirect(url_for("login"))
 
-    # 학부모/학생 페이지는 항상 2학기 정규반만 표시 (방학특강은 관리자 페이지에서만 조회 가능)
-    selected_term = DEFAULT_TERM
+    # 학생/학부모 페이지: 기본 "2학기 기말대비", 쿼리로 다른 섹션 전환 가능
+    # 섹션 선택 (내부 term 값 그대로 사용; 라벨은 STUDENT_TERM_SECTIONS 참조)
+    requested_term = request.args.get("term", "").strip() or DEFAULT_TERM
+    section_keys = [k for k, _ in STUDENT_TERM_SECTIONS]
+    if requested_term not in section_keys:
+        requested_term = DEFAULT_TERM
+    selected_term = requested_term
 
+    # 과거 기록이 "" 또는 None인 경우 → 레거시 "2학기 정규반"으로 간주
     def _term_of(r):
-        return r.get("term") or DEFAULT_TERM
+        return r.get("term") or "2학기 정규반"
 
     # 이 학생의 2학기 정규반 기록만
     items = [r for r in data["records"]
@@ -1676,6 +1749,8 @@ def my_page():
         review_done=review_done,
         review_total=review_total,
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
+        term_sections=STUDENT_TERM_SECTIONS,
+        selected_term=selected_term,
     )
 
 
@@ -1754,90 +1829,9 @@ def retake_submit():
     return result
 
 
-# ─── 라우트: Review Test 4회차 재시험 (Day 14-6 ~ Day 16-2) ───────────
-@app.route("/retake4")
-@parent_required
-def retake4_exam():
-    code = session["student_code"]
-    data = load_data()
-    student = data["students"].get(code)
-    if not student:
-        session.clear()
-        return redirect(url_for("login"))
-
-    # 이전 응시 기록 (최근 것)
-    prev_score = None
-    prev_date = None
-    for r in data["records"]:
-        if (r.get("student_code") == code
-                and r.get("category") == RETAKE4_CATEGORY):
-            if prev_date is None or (r.get("date") or "") >= prev_date:
-                prev_date = r.get("date")
-                prev_score = r.get("score")
-
-    return render_template(
-        "retake4_exam.html",
-        student_name=student["name"],
-        student_code=code,
-        prev_score=prev_score,
-        prev_date=prev_date,
-        exam_max=RETAKE4_MAX,
-        mc_key=RETAKE4_MC_KEY,
-        saw_key=RETAKE4_SA_WORD_KEY,
-        sae_key=RETAKE4_SA_ESSAY_KEY,
-    )
-
-
-@app.route("/retake4/submit", methods=["POST"])
-@parent_required
-def retake4_submit():
-    code = session["student_code"]
-    data = load_data()
-    if code not in data["students"]:
-        return {"error": "unknown student"}, 400
-
-    answers = request.get_json(silent=True) or {}
-    result = grade_retake4(answers)
-
-    # 학생 답안 요약 (교사 확인용 - feedback에 저장)
-    detail_lines = [result["feedback"]]
-
-    # 어색한 단어 (4) 해석 답안
-    trans_answers = []
-    for r in result["saw_results"]:
-        if r["stu_translation"]:
-            trans_answers.append(f"{r['n']}: {r['stu_translation'][:80]}")
-    if trans_answers:
-        detail_lines.append("[해석] " + " / ".join(trans_answers))
-
-    # 영작 답안 요약
-    essay_answers = []
-    for r in result["sae_results"]:
-        if r["stu_text"]:
-            essay_answers.append(f"{r['n']}({r['self_check'] or '?'}): {r['stu_text'][:60]}")
-    if essay_answers:
-        detail_lines.append("[영작] " + " / ".join(essay_answers))
-
-    feedback_full = " | ".join(detail_lines)[:500]  # 500자 제한
-
-    # 같은 학생의 기존 4회차 재시 기록 제거 후 1건으로 교체
-    today = datetime.now().strftime("%Y-%m-%d")
-    records = [r for r in data["records"]
-               if not (r.get("student_code") == code
-                       and r.get("category") == RETAKE4_CATEGORY)]
-    records.append({
-        "date": today,
-        "student_code": code,
-        "category": RETAKE4_CATEGORY,
-        "score": str(result["score"]),
-        "feedback": feedback_full,
-        "flag": "",
-        "resolved": False,
-        "term": DEFAULT_TERM,
-    })
-    save_data(data["students"], records)
-
-    return result
+# ─── (제거됨) Review Test 4회차 재시험 응시 라우트 ───────────
+# 2026-10 이후: 학생용 /retake4 입력 폼은 중단 (파이널 사진 제출로 대체)
+# grade_retake4/저장 헬퍼/상수(RETAKE4_*)는 과거 응시 데이터 열람 호환성 위해 유지.
 
 
 @app.route("/admin/retake/backfill-google")
@@ -2414,6 +2408,10 @@ def admin_clinic():
     )
 
 
+# ─── (제거됨) Review Test 4회차 재시 응시 결과 열람 라우트 ──
+# 템플릿 미작성 상태로 중단되었던 라우트. 과거 submission 데이터는 data/retake4_submissions.json에 유지.
+
+
 # ─── 라우트: 관리자 — 재시험 대상자 모아보기 ────────────
 @app.route("/admin/retakes", methods=["GET", "POST"])
 @admin_required
@@ -2435,9 +2433,16 @@ def admin_retakes():
                 flash(f"재시험 응시: {'O (완료)' if new_state else 'X (미완료)'}", "success")
         return redirect(url_for("admin_retakes"))
 
-    # 2학기 정규반만
+    # 재시험 대상자: 현재 섹션(기본 "2학기 기말대비") 기준. 쿼리로 섹션 전환 가능.
+    # 레거시 term이 비어있는 레코드는 "2학기 정규반"으로 폴백.
     def _term_of(r):
-        return r.get("term") or DEFAULT_TERM
+        return r.get("term") or "2학기 정규반"
+
+    requested_term_ret = request.args.get("term", "").strip() or DEFAULT_TERM
+    section_keys_ret = [k for k, _ in STUDENT_TERM_SECTIONS]
+    if requested_term_ret not in section_keys_ret:
+        requested_term_ret = DEFAULT_TERM
+    retake_term = requested_term_ret
 
     # 재시험 기준 + 시험 설정 로드
     thresholds = load_retake_thresholds()
@@ -2445,9 +2450,9 @@ def admin_retakes():
     review_threshold = thresholds.get("review", 80)
     test_config = load_test_deadlines()
 
-    # 2학기 정규반 전체 기록 (등수 계산용)
+    # 현재 선택 섹션 전체 기록 (등수 계산용)
     all_term_records_ret = [r for r in data["records"]
-                            if _term_of(r) == DEFAULT_TERM]
+                            if _term_of(r) == retake_term]
 
     def _rank_for(matcher_fn, target_code):
         """test 매칭 함수 기반으로 target_code의 등수 반환 (1~N) 또는 None"""
@@ -2502,7 +2507,7 @@ def admin_retakes():
     for code, student in data["students"].items():
       try:
         student_records = [r for r in data["records"]
-                           if r.get("student_code") == code and _term_of(r) == DEFAULT_TERM]
+                           if r.get("student_code") == code and _term_of(r) == retake_term]
 
         retake_items = []
 
@@ -2760,6 +2765,8 @@ def admin_retakes():
         copy_all_lines=copy_all_lines,
         students_sms_data=students_sms_data,
         pep_talks=PEP_TALKS,
+        retake_term=retake_term,
+        term_sections=STUDENT_TERM_SECTIONS,
     )
 
 

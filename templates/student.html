@@ -5,7 +5,7 @@
   <div>
     <h1>
       {{ student.name }} <span class="muted">학생</span>
-      <a href="https://drive.google.com/drive/folders/10dCr8giSNQRCVF9depn-KYWMz2XTCoaQ?usp=sharing"
+      <a href="https://drive.google.com/drive/folders/1fDvMQIKSiqNhSEtuFx34r8Tl_xmlZW5W?usp=drive_link"
          target="_blank" rel="noopener noreferrer" class="drive-link" title="신쌤 필기자료 공유 폴더 열기">
         📂 신쌤 필기자료
       </a>
@@ -53,18 +53,30 @@
   </div>
 </section>
 
-<section class="card" style="background:linear-gradient(135deg,#fef3c7,#fde68a); border:1px solid #f59e0b;">
-  <h2>📝 재시험 응시</h2>
-  <p style="margin:6px 0;">
-    <b>Review Test 4회차 재시험</b> — Day 14[06] ~ Day 16[02], 총 20문항 (40점 만점)
-  </p>
-  <p class="muted small" style="margin:6px 0;">
-    시험지를 다운로드하여 직접 풀어보고, 답안을 사이트에 입력하면 자동으로 채점됩니다.
-  </p>
-  <p style="margin-top:10px;">
-    <a href="{{ url_for('retake4_exam') }}" class="btn-primary" style="text-decoration:none; display:inline-block;">
-      📝 Review Test 4회차 재시험 응시하기 →
+<!-- ── 섹션 탭 (2학기 기말대비 / 2학기 중간대비 / 겨울방학특강) ── -->
+<section class="card term-switch-card" style="padding:0; overflow:hidden;">
+  <div class="term-switch-tabs" style="display:flex; gap:0; flex-wrap:wrap;">
+    {% for term_key, term_label in term_sections %}
+    <a href="{{ url_for('my_page', term=term_key) }}"
+       class="term-tab {% if term_key == selected_term %}active{% endif %}"
+       style="flex:1; min-width:140px; padding:16px 14px; text-align:center; text-decoration:none;
+              font-weight:700; font-size:15px; border-right:1px solid #e5e7eb;
+              {% if term_key == selected_term %}
+                background:linear-gradient(135deg,#2563eb,#1d4ed8); color:#fff;
+              {% else %}
+                background:#f9fafb; color:#4b5563;
+              {% endif %}">
+      {% if term_key == '2학기 기말대비' %}📘{% elif term_key == '2학기 정규반' %}📗{% else %}❄️{% endif %}
+      {{ term_label }}
     </a>
+    {% endfor %}
+  </div>
+  <p class="muted small" style="margin:0; padding:10px 14px; background:#f3f4f6; border-top:1px solid #e5e7eb;">
+    📍 현재 섹션:
+    <b>{% for k, l in term_sections %}{% if k == selected_term %}{{ l }}{% endif %}{% endfor %}</b>
+    {% if selected_term != '2학기 기말대비' %}
+      <span style="color:#dc2626;"> (기본은 2학기 기말대비)</span>
+    {% endif %}
   </p>
 </section>
 
