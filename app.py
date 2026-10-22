@@ -2433,11 +2433,8 @@ def admin_retakes():
     def _term_of(r):
         return r.get("term") or "2학기 정규반"
 
-    requested_term_ret = request.args.get("term", "").strip() or DEFAULT_TERM
-    section_keys_ret = [k for k, _ in STUDENT_TERM_SECTIONS]
-    if requested_term_ret not in section_keys_ret:
-        requested_term_ret = DEFAULT_TERM
-    retake_term = requested_term_ret
+    # 2학기 기말대비 기준으로만 재시험 대상 재선정 (쿼리 ?term= 무시)
+    retake_term = DEFAULT_TERM
 
     # 재시험 기준 + 시험 설정 로드
     thresholds = load_retake_thresholds()
@@ -2506,8 +2503,9 @@ def admin_retakes():
 
         retake_items = []
 
-        # 단어시험 회차별 체크
-        for round_info in WORD_TEST_ROUNDS:
+        # 단어시험 회차별 체크 (2학기 기말대비 섹션에서는 Day 31-45 체크 skip)
+        word_rounds_to_check = [] if retake_term == "2학기 기말대비" else WORD_TEST_ROUNDS
+        for round_info in word_rounds_to_check:
             matching = [r for r in student_records
                         if _record_matches_round(r, round_info["range"])]
             matching.sort(key=lambda r: r.get("date", ""), reverse=True)
