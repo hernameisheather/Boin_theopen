@@ -80,6 +80,7 @@
   </p>
 </section>
 
+{% if selected_term != '2학기 기말대비' %}
 <section class="card vocab-zone-card">
   <h2>📖 보인고 스타일 단어 TEST
     <span class="vocab-progress-tag">
@@ -155,6 +156,7 @@
     </tbody>
   </table>
 </section>
+{% endif %}
 
 {% if legacy_word_tests %}
 <section class="card vocab-zone-card legacy-word-card">
