@@ -1598,13 +1598,8 @@ def my_page():
         session.clear()
         return redirect(url_for("login"))
 
-    # 학생/학부모 페이지: 기본 "2학기 기말대비", 쿼리로 다른 섹션 전환 가능
-    # 섹션 선택 (내부 term 값 그대로 사용; 라벨은 STUDENT_TERM_SECTIONS 참조)
-    requested_term = request.args.get("term", "").strip() or DEFAULT_TERM
-    section_keys = [k for k, _ in STUDENT_TERM_SECTIONS]
-    if requested_term not in section_keys:
-        requested_term = DEFAULT_TERM
-    selected_term = requested_term
+    # 학생/학부모 페이지: 항상 "2학기 기말대비"만 노출 (중간대비/겨울방학특강 섹션 제거)
+    selected_term = DEFAULT_TERM
 
     # 과거 기록이 "" 또는 None인 경우 → 레거시 "2학기 정규반"으로 간주
     def _term_of(r):

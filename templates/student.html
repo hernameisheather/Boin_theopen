@@ -53,30 +53,10 @@
   </div>
 </section>
 
-<!-- ── 섹션 탭 (2학기 기말대비 / 2학기 중간대비 / 겨울방학특강) ── -->
-<section class="card term-switch-card" style="padding:0; overflow:hidden;">
-  <div class="term-switch-tabs" style="display:flex; gap:0; flex-wrap:wrap;">
-    {% for term_key, term_label in term_sections %}
-    <a href="{{ url_for('my_page', term=term_key) }}"
-       class="term-tab {% if term_key == selected_term %}active{% endif %}"
-       style="flex:1; min-width:140px; padding:16px 14px; text-align:center; text-decoration:none;
-              font-weight:700; font-size:15px; border-right:1px solid #e5e7eb;
-              {% if term_key == selected_term %}
-                background:linear-gradient(135deg,#2563eb,#1d4ed8); color:#fff;
-              {% else %}
-                background:#f9fafb; color:#4b5563;
-              {% endif %}">
-      {% if term_key == '2학기 기말대비' %}📘{% elif term_key == '2학기 정규반' %}📗{% else %}❄️{% endif %}
-      {{ term_label }}
-    </a>
-    {% endfor %}
-  </div>
-  <p class="muted small" style="margin:0; padding:10px 14px; background:#f3f4f6; border-top:1px solid #e5e7eb;">
-    📍 현재 섹션:
-    <b>{% for k, l in term_sections %}{% if k == selected_term %}{{ l }}{% endif %}{% endfor %}</b>
-    {% if selected_term != '2학기 기말대비' %}
-      <span style="color:#dc2626;"> (기본은 2학기 기말대비)</span>
-    {% endif %}
+<!-- 섹션 탭 제거됨: 2학기 기말대비 섹션만 노출 -->
+<section class="card" style="padding:12px 16px; background:linear-gradient(135deg,#dbeafe,#bfdbfe); border:1px solid #93c5fd;">
+  <p style="margin:0; font-weight:700; color:#1e40af;">
+    📘 <b>2학기 기말대비</b>
   </p>
 </section>
 
@@ -225,7 +205,7 @@
     {% endif %}
   </h2>
   {% if not review_records %}
-  <p class="muted">아직 등록된 Review test 기록이 없습니다. 항목명에 'Review' 또는 '리뷰'가 포함되면 자동으로 여기에 표시됩니다.</p>
+  <p class="muted">아직 등록된 Review test 기록이 없습니다.</p>
   {% else %}
   <table class="records vocab-tests">
     <thead>
