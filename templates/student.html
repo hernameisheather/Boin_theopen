@@ -281,6 +281,10 @@
       <span class="rank-badge {% if crank[0] == 1 %}rank-gold{% elif crank[0] == 2 %}rank-silver{% elif crank[0] == 3 %}rank-bronze{% endif %}">
         🏆 종합 {{ crank[0] }}등 <small>/ {{ crank[1] }}명</small>
       </span>
+      {% set miss = cat_missing.get(cat, 0) %}
+      {% if miss > 0 %}
+      <small class="muted" style="margin-left:6px;">(미응시: {{ miss }}명)</small>
+      {% endif %}
     </div>
     {% endif %}
     <div class="stat-meta">
@@ -334,6 +338,10 @@
               <span class="rank-badge {% if rk[0] == 1 %}rank-gold{% elif rk[0] == 2 %}rank-silver{% elif rk[0] == 3 %}rank-bronze{% endif %}">
                 {{ rk[0] }}등 <small>/ {{ rk[1] }}명</small>
               </span>
+              {% set miss = cat_missing.get(r.category, 0) %}
+              {% if miss > 0 %}
+              <br><small class="muted">(미응시: {{ miss }}명)</small>
+              {% endif %}
             {% else %}
               <span class="muted small">—</span>
             {% endif %}
@@ -418,6 +426,10 @@
               <span class="rank-badge {% if rk[0] == 1 %}rank-gold{% elif rk[0] == 2 %}rank-silver{% elif rk[0] == 3 %}rank-bronze{% endif %}">
                 {{ rk[0] }}등 <small>/ {{ rk[1] }}명</small>
               </span>
+              {% set miss = cat_missing.get(r.category, 0) %}
+              {% if miss > 0 %}
+              <br><small class="muted">(미응시: {{ miss }}명)</small>
+              {% endif %}
             {% else %}
               <span class="muted small">—</span>
             {% endif %}

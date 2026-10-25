@@ -1681,8 +1681,14 @@ def my_page():
         if sc_code not in cat_best[cat] or sc > cat_best[cat][sc_code]:
             cat_best[cat][sc_code] = sc
 
+    # 해당 term에서 활동 중인 전체 학생 집합 (미응시자 수 계산용)
+    active_codes_in_term = {r["student_code"] for r in term_all_records if r.get("student_code")}
+
     ranks = {}
+    cat_missing = {}  # 카테고리별 미응시자 수
     for cat, code_scores in cat_best.items():
+        # 미응시자 수: 활동 학생 중 해당 카테고리에 유효 점수 없는 학생
+        cat_missing[cat] = max(0, len(active_codes_in_term) - len(code_scores))
         if len(code_scores) < 2:
             continue
         sorted_entries = sorted(code_scores.items(), key=lambda x: -x[1])
@@ -1749,6 +1755,7 @@ def my_page():
         last_update=datetime.fromtimestamp(data["mtime"]).strftime("%Y-%m-%d %H:%M") if data["mtime"] else "—",
         term_sections=STUDENT_TERM_SECTIONS,
         selected_term=selected_term,
+        cat_missing=cat_missing,
     )
 
 
