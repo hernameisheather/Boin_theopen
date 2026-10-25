@@ -381,7 +381,8 @@ def records_for(student_code):
 TERMS = ["2학기 기말대비", "2학기 중간대비", "2학기 정규반", "방학특강"]
 DEFAULT_TERM = "2학기 기말대비"
 # 이 날짜(포함) 이후의 레코드는 "2학기 정규반"으로 적혀있어도 자동으로 "2학기 기말대비"로 분류
-TERM_FINAL_CUTOFF = "2026-10-25"
+# (중간고사 이후 ~ 기말대비 시즌 전체 커버. 중간고사가 10월 초순이었다고 가정)
+TERM_FINAL_CUTOFF = "2026-10-01"
 # 과거 기록의 레거시 term 값과 UI 라벨 매핑 (표시용)
 TERM_DISPLAY_LABELS = {
     "2학기 기말대비": "2학기 기말대비",
@@ -3369,7 +3370,8 @@ run_parent_phones_v2_bootstrap()
 
 
 # ─── 2학기 기말대비 재분류: cutoff 이후 "2학기 정규반" → "2학기 기말대비" (1회 실행) ──
-_TERM_FINAL_RECLASSIFY_MARKER = os.path.join(DATA_DIR, ".term_final_reclassify_v1.json")
+# v2: cutoff 날짜를 2026-10-01로 넓힘 (중간고사 이후 전체 커버)
+_TERM_FINAL_RECLASSIFY_MARKER = os.path.join(DATA_DIR, ".term_final_reclassify_v2.json")
 
 
 def run_term_final_reclassify_bootstrap():
