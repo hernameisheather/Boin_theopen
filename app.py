@@ -380,6 +380,8 @@ def records_for(student_code):
 # 신규(기본): "2학기 기말대비" / 레거시 유지: "2학기 중간대비"(=2학기 정규반), "방학특강"(겨울방학특강)
 TERMS = ["2학기 기말대비", "2학기 중간대비", "2학기 정규반", "방학특강"]
 DEFAULT_TERM = "2학기 기말대비"
+# 이 날짜(포함) 이후의 레코드는 "2학기 정규반"으로 적혀있어도 자동으로 "2학기 기말대비"로 분류
+TERM_FINAL_CUTOFF = "2026-10-25"
 # 과거 기록의 레거시 term 값과 UI 라벨 매핑 (표시용)
 TERM_DISPLAY_LABELS = {
     "2학기 기말대비": "2학기 기말대비",
@@ -1881,12 +1883,19 @@ def admin():
                     flash(f"엑셀 파일을 읽을 수 없습니다: {e}", "error")
                     return redirect(url_for("admin"))
 
-                # 업로드 시 학기/과정이 비어있으면 자동으로 기본값(2학기 정규반) 지정
+                # 업로드 시 학기/과정 자동 보정:
+                # 1) 비어있는 term → DEFAULT_TERM(2학기 기말대비) 지정
+                # 2) 날짜가 TERM_FINAL_CUTOFF 이후인데 term이 "2학기 정규반"으로 적혀있으면 → "2학기 기말대비"로 자동 전환
                 defaulted_term_count = 0
+                reclassified_term_count = 0
                 for r in new_records:
                     if not r.get("term"):
                         r["term"] = DEFAULT_TERM
                         defaulted_term_count += 1
+                    elif (r.get("term") == "2학기 정규반"
+                          and (r.get("date") or "") >= TERM_FINAL_CUTOFF):
+                        r["term"] = "2학기 기말대비"
+                        reclassified_term_count += 1
 
                 if mode == "append":
                     current = load_data()
@@ -1959,12 +1968,17 @@ def admin():
                                  (f" (중복 {skipped_msgs}건 건너뜀)" if skipped_msgs else ""))
                     if defaulted_term_count:
                         parts.append(f"학기 미지정 {defaulted_term_count}건 → '{DEFAULT_TERM}' 자동 배정")
+                    if reclassified_term_count:
+                        parts.append(f"'2학기 정규반' {reclassified_term_count}건 → '2학기 기말대비' 자동 전환 (날짜 ≥ {TERM_FINAL_CUTOFF})")
                     flash("추가 완료: " + " · ".join(parts), "success")
                 else:
                     save_data(new_students, new_records, new_homeworks, new_messages)
-                    tail = ""
+                    tail_parts = []
                     if defaulted_term_count:
-                        tail = f" (학기 미지정 {defaulted_term_count}건은 '{DEFAULT_TERM}'으로 자동 배정)"
+                        tail_parts.append(f"학기 미지정 {defaulted_term_count}건 → '{DEFAULT_TERM}' 자동 배정")
+                    if reclassified_term_count:
+                        tail_parts.append(f"'2학기 정규반' {reclassified_term_count}건 → '2학기 기말대비' 자동 전환 (날짜 ≥ {TERM_FINAL_CUTOFF})")
+                    tail = f" ({' · '.join(tail_parts)})" if tail_parts else ""
                     flash(
                         f"덮어쓰기 완료: 학생 {len(new_students)}명, 기록 {len(new_records)}건, "
                         f"숙제 {len(new_homeworks)}건, 한마디 {len(new_messages)}건으로 전체 교체됨.{tail}",
@@ -2115,6 +2129,9 @@ def admin_records():
         flag = request.form.get("flag", "").strip()
         resolved = request.form.get("resolved") == "on"
         term = request.form.get("term", "").strip() or DEFAULT_TERM
+        # cutoff 이후 날짜인데 term이 "2학기 정규반"이면 → "2학기 기말대비"로 자동 전환
+        if term == "2학기 정규반" and date >= TERM_FINAL_CUTOFF:
+            term = "2학기 기말대비"
 
         if not date:
             flash("날짜를 입력해주세요.", "error")
@@ -3349,6 +3366,46 @@ def run_parent_phones_v2_bootstrap():
 
 
 run_parent_phones_v2_bootstrap()
+
+
+# ─── 2학기 기말대비 재분류: cutoff 이후 "2학기 정규반" → "2학기 기말대비" (1회 실행) ──
+_TERM_FINAL_RECLASSIFY_MARKER = os.path.join(DATA_DIR, ".term_final_reclassify_v1.json")
+
+
+def run_term_final_reclassify_bootstrap():
+    """TERM_FINAL_CUTOFF 이후 날짜 레코드 중 term이 '2학기 정규반'인 것 → '2학기 기말대비'로 일괄 전환."""
+    import json
+    if os.path.exists(_TERM_FINAL_RECLASSIFY_MARKER):
+        return
+    try:
+        data = load_data()
+        reclassified = []
+        for r in data["records"]:
+            date = r.get("date") or ""
+            if r.get("term") == "2학기 정규반" and date >= TERM_FINAL_CUTOFF:
+                r["term"] = "2학기 기말대비"
+                reclassified.append({
+                    "date": date,
+                    "student_code": r.get("student_code", ""),
+                    "category": r.get("category", ""),
+                    "score": r.get("score", ""),
+                })
+        if reclassified:
+            save_data(data["students"], data["records"])
+        os.makedirs(os.path.dirname(_TERM_FINAL_RECLASSIFY_MARKER), exist_ok=True)
+        with open(_TERM_FINAL_RECLASSIFY_MARKER, "w", encoding="utf-8") as f:
+            json.dump({
+                "ran_at": datetime.now().isoformat(),
+                "cutoff": TERM_FINAL_CUTOFF,
+                "reclassified_count": len(reclassified),
+                "reclassified": reclassified,
+            }, f, ensure_ascii=False, indent=2)
+        print(f"[INFO] Term final reclassify bootstrap: {len(reclassified)}건 → '2학기 기말대비'")
+    except Exception as e:
+        print(f"[WARN] Term final reclassify bootstrap failed: {e}")
+
+
+run_term_final_reclassify_bootstrap()
 
 
 # ─── 메인 ────────────────────────────────────────────────────
