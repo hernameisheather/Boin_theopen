@@ -84,8 +84,9 @@
   <section class="card">
     <h2>📝 시험별 재시험 대상 & 일괄 문자 발송</h2>
     <p class="muted small">
-      아래 시험을 펼쳐 학생별로 <b>[학생]/[학부모]</b> 발송 대상을 체크한 뒤
-      <b>선택 대상에게 문자 발송</b> 버튼을 누르세요. 문자가 한 명씩 순차로 열립니다.
+      아래 시험을 펼쳐 학생별로 <b>[학생]/[학부모]</b> 발송 대상을 체크한 뒤 <b>발송 방식</b>을 선택하세요.<br>
+      · <b>개별 발송</b>: 한 명씩 순차로 열림 (이름·점수 포함 개인화 메시지)<br>
+      · <b>단체 발송</b>: 선택한 번호들에 한 번에 발송 (공통 안내 메시지)
     </p>
   </section>
 
@@ -107,11 +108,22 @@
         <input type="checkbox" onclick="toggleAllInTest('{{ t.key }}', 'parent', this.checked)">
         👨‍👩‍👦 학부모 전원 선택
       </label>
+      <span class="muted small" id="count-{{ t.key }}">0명 선택됨</span>
+    </div>
+    <div class="bulk-mode-bar">
+      <span class="bulk-mode-label">📣 발송 방식:</span>
+      <label class="bulk-mode-radio">
+        <input type="radio" name="mode_{{ t.key }}" value="individual" checked>
+        📱 개별 발송 (개인화)
+      </label>
+      <label class="bulk-mode-radio">
+        <input type="radio" name="mode_{{ t.key }}" value="group">
+        📢 단체 발송 (한 번에)
+      </label>
       <button type="button" class="btn-primary btn-bulk-send"
               onclick="sendBulkForTest('{{ t.key }}')">
-        📤 선택 대상에게 문자 발송 →
+        📤 발송 시작 →
       </button>
-      <span class="muted small" id="count-{{ t.key }}">0명 선택됨</span>
     </div>
 
     <table class="records test-student-table">
@@ -319,10 +331,18 @@
 
 .bulk-toolbar {
   display:flex; align-items:center; gap:16px; flex-wrap:wrap;
-  padding:12px 14px; background:#fef3c7; border-radius:8px; margin:10px 0;
+  padding:12px 14px; background:#fef3c7; border-radius:8px 8px 0 0; margin:10px 0 0;
 }
 .bulk-checkall { display:inline-flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; }
-.btn-bulk-send { font-size:14px; padding:10px 16px; }
+.bulk-mode-bar {
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 14px; background:#dbeafe; border-radius:0 0 8px 8px; margin:0 0 10px;
+  border-top:1px dashed #93c5fd;
+}
+.bulk-mode-label { font-weight:700; color:#1e40af; }
+.bulk-mode-radio { display:inline-flex; align-items:center; gap:5px; font-weight:600; cursor:pointer; padding:4px 10px; border-radius:6px; background:#fff; }
+.bulk-mode-radio:has(input:checked) { background:#2563eb; color:#fff; }
+.btn-bulk-send { font-size:14px; padding:10px 16px; margin-left:auto; }
 
 .test-student-table { width:100%; }
 .test-student-table td { padding:8px 10px; vertical-align:middle; }
@@ -497,8 +517,12 @@ function sendBulkForTest(testKey) {
   const test = TESTS_DATA.find(function(t) { return t.key === testKey; });
   if (!test) { alert('시험 정보 오류'); return; }
 
-  // 큐 구성
-  BULK_QUEUE = [];
+  // 발송 방식: individual (개별) / group (단체)
+  const modeInput = document.querySelector(`input[name="mode_${testKey}"]:checked`);
+  const mode = modeInput ? modeInput.value : 'individual';
+
+  // 선택된 대상 정보 수집 (공통)
+  const picked = [];
   cbs.forEach(function(cb) {
     const code = cb.getAttribute('data-code');
     const role = cb.getAttribute('data-role');
@@ -506,6 +530,45 @@ function sendBulkForTest(testKey) {
     if (!stu) return;
     const phone = role === 'student' ? stu.student_phone_raw : stu.parent_phone_raw;
     if (!phone) return;
+    picked.push({ stu: stu, role: role, phone: phone });
+  });
+  if (picked.length === 0) {
+    alert('선택된 대상 중 발송 가능한 번호가 없습니다.');
+    return;
+  }
+
+  // ── 단체 발송 모드 (한 번에) ──
+  if (mode === 'group') {
+    const phoneList = picked.map(x => x.phone);
+    const uniquePhones = Array.from(new Set(phoneList));
+    const previewNames = picked.slice(0, 5)
+        .map(x => x.stu.name + '(' + (x.role === 'student' ? '학생' : '어머님') + ')')
+        .join(', ');
+    const more = picked.length > 5 ? ` 외 ${picked.length - 5}명` : '';
+    const body = "[보인고영어=신쌤] " + test.label + " 재시험 안내:\n"
+               + "해당 시험 재시험 대상자이시니 확인 부탁드립니다.\n"
+               + "세부 성적은 학생용 사이트에서 개별 확인 가능합니다.\n\n"
+               + "문의: 010-5939-0080\n\n"
+               + pickPepTalk();
+    if (!confirm(`📢 단체 발송 (한 번에):\n\n수신자 ${uniquePhones.length}개 번호 (${picked.length}명)\n대상: ${previewNames}${more}\n\n문자 앱이 1번 열리고 모든 번호가 수신자로 입력됩니다.\n계속하시겠습니까?`)) {
+      return;
+    }
+    // sms: + 콤마로 연결된 번호들
+    const smsUri = 'sms:' + uniquePhones.join(',') + '?body=' + encodeURIComponent(body);
+    const a = document.createElement('a');
+    a.href = smsUri;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    alert(`✅ 단체 문자 앱이 열렸습니다.\n수신자 ${uniquePhones.length}개 번호 (${picked.length}명)에게 공통 메시지를 발송하세요.`);
+    return;
+  }
+
+  // ── 개별 발송 모드 (기존 로직) ──
+  BULK_QUEUE = [];
+  picked.forEach(function(p) {
+    const stu = p.stu;
     // SMS 본문: 이 시험 한 건만 담아 발송 (해당 시험만 재시험 안내)
     const body = "[보인고영어=신쌤] " + stu.name + " 학생★시험 성적 안내:"
                + "\n· " + test.label + ": " + stu.display_text
@@ -513,23 +576,18 @@ function sendBulkForTest(testKey) {
     BULK_QUEUE.push({
       name: stu.name,
       code: stu.code,
-      role: role,
-      role_label: role === 'student' ? '학생' : '어머님',
-      phone: phone,
+      role: p.role,
+      role_label: p.role === 'student' ? '학생' : '어머님',
+      phone: p.phone,
       body: body,
       test_label: test.label,
     });
   });
 
-  if (BULK_QUEUE.length === 0) {
-    alert('선택된 대상 중 발송 가능한 번호가 없습니다.');
-    return;
-  }
-
   // 발송 대상 확인
   const preview = BULK_QUEUE.slice(0, 5).map(function(x) { return `${x.name}(${x.role_label})`; }).join(', ');
   const more = BULK_QUEUE.length > 5 ? ` 외 ${BULK_QUEUE.length - 5}명` : '';
-  if (!confirm(`총 ${BULK_QUEUE.length}건 발송을 시작합니다.\n\n대상: ${preview}${more}\n\n하나씩 순차로 문자 앱이 열립니다. 계속하시겠습니까?`)) {
+  if (!confirm(`📱 개별 발송 (개인화):\n\n총 ${BULK_QUEUE.length}건 발송을 시작합니다.\n대상: ${preview}${more}\n\n하나씩 순차로 문자 앱이 열립니다. 계속하시겠습니까?`)) {
     return;
   }
 
