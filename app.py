@@ -2610,8 +2610,9 @@ def admin_retakes():
             # 이 학생의 전체 시험 데이터 수집 (SMS 옵션 "전체" / "선택"용)
             # 새 포맷: 미응시/PASS/PASS(N등♡)/{점수}점 (재시 완료 기한: YYYY-MM-DD)
             all_tests_for_sms = []
-            # 1) 보인고 단어 TEST (2회차)
-            for br in BOINGO_WORD_ROUNDS:
+            # 1) 보인고 단어 TEST (2학기 기말대비 섹션에서는 Day 31-45 제외 — 중간대비 범위)
+            boingo_rounds_for_sms = [] if retake_term == "2학기 기말대비" else BOINGO_WORD_ROUNDS
+            for br in boingo_rounds_for_sms:
                 b_matching = sorted(
                     [r for r in student_records if _record_matches_round(r, br["range"])],
                     key=lambda r: r.get("date", ""), reverse=True,
