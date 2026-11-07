@@ -383,6 +383,8 @@ DEFAULT_TERM = "2학기 기말대비"
 # 이 날짜(포함) 이후의 레코드는 "2학기 정규반"으로 적혀있어도 자동으로 "2학기 기말대비"로 분류
 # (중간고사 이후 ~ 기말대비 시즌 전체 커버. 중간고사가 10월 초순이었다고 가정)
 TERM_FINAL_CUTOFF = "2026-10-01"
+# 학생/학부모 페이지는 이 날짜 이후 레코드만 표시 (중간고사 때 치룬 파이널/단어 제외)
+STUDENT_PAGE_SHOW_FROM = "2026-10-18"
 # 과거 기록의 레거시 term 값과 UI 라벨 매핑 (표시용)
 TERM_DISPLAY_LABELS = {
     "2학기 기말대비": "2학기 기말대비",
@@ -1608,9 +1610,11 @@ def my_page():
     def _term_of(r):
         return r.get("term") or "2학기 정규반"
 
-    # 이 학생의 2학기 정규반 기록만
+    # 이 학생의 기말대비 기록만 (STUDENT_PAGE_SHOW_FROM 날짜 이후만 노출)
     items = [r for r in data["records"]
-             if r["student_code"] == code and _term_of(r) == selected_term]
+             if r["student_code"] == code
+             and _term_of(r) == selected_term
+             and (r.get("date") or "") >= STUDENT_PAGE_SHOW_FROM]
     items.sort(key=lambda r: r.get("date", ""), reverse=True)
 
     grouped = defaultdict(list)
@@ -1618,8 +1622,10 @@ def my_page():
         grouped[r["category"] or "기타"].append(r)
     grouped = dict(grouped)
 
-    # 학기 필터가 적용된 전체 기록 (반 평균/등수 계산용)
-    term_all_records = [r for r in data["records"] if _term_of(r) == selected_term]
+    # 학기+날짜 필터가 적용된 전체 기록 (반 평균/등수 계산용)
+    term_all_records = [r for r in data["records"]
+                        if _term_of(r) == selected_term
+                        and (r.get("date") or "") >= STUDENT_PAGE_SHOW_FROM]
 
     # 학생 본인 카테고리별 통계
     stats = {}
@@ -1713,8 +1719,10 @@ def my_page():
     # zone 계산 (모두 학기 필터된 items 기준)
     # 보인고 스타일 단어 TEST (Day 31-37, Day 38-45) — 전체 학생
     deadlines = load_test_deadlines()
-    # 전체 반 학생 기록 (평균/상태 계산용): 2학기 정규반 전체
-    all_term_records = [r for r in data["records"] if _term_of(r) == selected_term]
+    # 전체 반 학생 기록 (평균/상태 계산용): 선택 섹션 + 노출 날짜 이후만
+    all_term_records = [r for r in data["records"]
+                        if _term_of(r) == selected_term
+                        and (r.get("date") or "") >= STUDENT_PAGE_SHOW_FROM]
     word_tests = compute_boingo_word_test_status(
         items, deadlines, student_code=code, all_records=all_term_records
     )
